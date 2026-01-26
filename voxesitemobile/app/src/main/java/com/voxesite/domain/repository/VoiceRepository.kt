@@ -4,5 +4,11 @@ import com.voxesite.domain.model.TextResponse
 import kotlinx.coroutines.flow.Flow
 
 interface VoiceRepository {
-    suspend fun streamText(audio: AudioInput): TextResponse
+
+    fun startSession()
+    fun sendAudio(chunk: ByteArray)
+    fun stopSession()
+
+
+    val textFlow: Flow<TextResponse>
 }
