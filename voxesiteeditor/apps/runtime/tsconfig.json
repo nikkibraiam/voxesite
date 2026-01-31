@@ -1,11 +1,13 @@
 {
   "extends": "./.nuxt/tsconfig.json",
+  "types": ["nuxt"],
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
-      "@ui/*": ["../../packages/ui/*"],
-      "@contracts/*": ["../../packages/contracts/*"],
-      "@utils/*": ["../../packages/utils/*"]
+      "@cms/contracts": ["../../packages/contracts"],
+      "@cms/ui/*": ["../../packages/ui/*"],
+      "@cms/utils/*": ["../../packages/utils/*"]
     }
   }
 }
+  
