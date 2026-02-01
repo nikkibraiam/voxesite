@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { renderBlock } from '@cms/ui/renderer/renderComponent'
+import { renderBlock } from '@cms/ui'
 import type { Page } from '@cms/contracts'
 
 const { data: page } = await useFetch<Page>('/api/page/home')
@@ -13,3 +13,4 @@ const { data: page } = await useFetch<Page>('/api/page/home')
     :key="block.id"
   />
 </template>
+ 

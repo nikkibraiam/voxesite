@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import type { Page } from '@cms/contracts'
-import { renderBlock } from '@cms/ui/renderer/renderComponent'
+import { renderBlock } from '@cms/ui'
 
 // 1️⃣ estado de la página
 const page = ref<Page | null>(null)

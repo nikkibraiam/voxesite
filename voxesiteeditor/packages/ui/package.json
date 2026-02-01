@@ -2,8 +2,10 @@
   "name": "@cms/ui",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
   "private": true,
+  "type": "module",
+  "main": "index.ts",
+  "types": "index.ts",
   "dependencies": {
     "@cms/contracts": "workspace:*"
   },
@@ -13,5 +15,11 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "packageManager": "pnpm@10.28.2"
+  "packageManager": "pnpm@10.28.2",
+  "exports": {
+    ".": {
+      "import": "./index.ts",
+      "types": "./index.ts"
+    }
+  }
 }

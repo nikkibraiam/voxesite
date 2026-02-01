@@ -5,10 +5,15 @@
   "main": "index.js",
   "private": true,
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev:editor": "pnpm -F @cms/editor dev",
+    "dev:runtime": "pnpm -F @cms/runtime dev",
+    "dev": "pnpm -r --parallel dev"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "packageManager": "pnpm@10.28.2"
+  "packageManager": "pnpm@10.28.2",
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
 }
