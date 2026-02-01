@@ -4,18 +4,16 @@ const props = defineProps<{
   enabled?: boolean
 }>()
 
+const emit = defineEmits<{
+  (e: 'select', id: string): void
+}>()
+
 function onClick() {
   if (!props.enabled) return
-
-  window.parent.postMessage(
-    {
-      type: 'BLOCK_SELECT',
-      blockId: props.blockId
-    },
-    '*'
-  )
+  emit('select', props.blockId)
 }
 </script>
+
 
 <template>
   <div

@@ -2,19 +2,24 @@
 import { ref, onMounted } from 'vue'
 import type { Page } from '@cms/contracts'
 import { renderBlock } from '@cms/ui'
+import { SelectableBlock } from '@cms/ui/wrappers'
 
-// 1️⃣ estado de la página
 const page = ref<Page | null>(null)
 
-// 2️⃣ carga normal (runtime standalone)
+// carga normal
 const { data } = await useFetch<Page>('/api/page/home')
 page.value = data.value || null
 
-// 3️⃣ escucha preview desde el editor
+function onBlockSelect(blockId: string) {
+  // 🔥 aquí lo capturas
+  window.parent.postMessage(
+    { type: 'BLOCK_SELECT', blockId },
+    'http://localhost:3000'
+  )
+}
+
 onMounted(() => {
   window.addEventListener('message', (event) => {
-    console.log("entro evento")
-    console.log(event.data)
     if (event.origin !== 'http://localhost:3000') return
     page.value = event.data as Page
   })
@@ -22,10 +27,16 @@ onMounted(() => {
 </script>
 
 <template>
-  <component
+  <SelectableBlock
     v-for="block in page?.blocks || []"
-    :is="renderBlock(block)"
-    v-bind="block.props"
     :key="block.id"
-  />
+    :block-id="block.id"
+    enabled
+    @select="onBlockSelect"
+  >
+    <component
+      :is="renderBlock(block)"
+      v-bind="block.props"
+    />
+  </SelectableBlock>
 </template>

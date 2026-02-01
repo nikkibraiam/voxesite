@@ -39,9 +39,7 @@ onMounted(() => {
 watch(
   page,
   (newPage) => {
-    if (!previewFrame.value) return
-
-    previewFrame.value.contentWindow?.postMessage(
+    previewFrame.value?.contentWindow?.postMessage(
       structuredClone(toRaw(newPage)),
       'http://localhost:3001'
     )
