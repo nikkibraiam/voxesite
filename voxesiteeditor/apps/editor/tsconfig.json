@@ -4,9 +4,10 @@
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
-      "@cms/contracts": ["../../packages/contracts"],
+      "@cms/ui": ["../../packages/ui/index.ts"],
       "@cms/ui/*": ["../../packages/ui/*"],
-      "@cms/utils/*": ["../../packages/utils/*"]
+      "@cms/contracts": ["../../packages/contracts/index.ts"],
+      "@cms/contracts/*": ["../../packages/contracts/*"]
     }
   }
 }

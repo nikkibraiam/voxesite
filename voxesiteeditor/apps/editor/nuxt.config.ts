@@ -1,8 +1,6 @@
 export default defineNuxtConfig({
-  alias: {
-    "@cms/contracts": "../../packages/contracts",
-    "@cms/ui": "../../packages/ui",
-    "@cms/utils": "../../packages/utils",
+  build: {
+    transpile: ["@cms/ui", "@cms/contracts"],
   },
   vite: {
     server: {
@@ -16,5 +14,8 @@ export default defineNuxtConfig({
   },
   devServer: {
     port: 3000,
+  },
+  devtools: {
+    enabled: false,
   },
 });

@@ -13,7 +13,9 @@ page.value = data.value || null
 // 3️⃣ escucha preview desde el editor
 onMounted(() => {
   window.addEventListener('message', (event) => {
-    // ⚠️ PoC: luego validamos origin + schema
+    console.log("entro evento")
+    console.log(event.data)
+    if (event.origin !== 'http://localhost:3000') return
     page.value = event.data as Page
   })
 })

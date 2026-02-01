@@ -1,0 +1,1 @@
+export { default as SelectableBlock } from './SelectableBlock.vue'

@@ -7,6 +7,11 @@ const registry: Record<Block['type'], any> = {
   TextBlock
 }
 
-export function renderBlock(block: Block) {
-  return registry[block.type]
+export function renderBlock(block: any) {
+  switch (block.type) {
+    case 'Hero':
+      return Hero
+    case 'TextBlock':
+      return TextBlock
+  }
 }

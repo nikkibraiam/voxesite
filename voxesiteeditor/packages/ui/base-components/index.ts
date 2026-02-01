@@ -1,0 +1,1 @@
+export { default as Modal } from '../base-components/Modal.vue'

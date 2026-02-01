@@ -20,6 +20,9 @@
     ".": {
       "import": "./index.ts",
       "types": "./index.ts"
-    }
+    },
+    "./schemas": "./schemas/index.ts",
+    "./base-components": "./base-components/index.ts",
+    "./wrappers": "./wrappers/index.ts"
   }
 }
