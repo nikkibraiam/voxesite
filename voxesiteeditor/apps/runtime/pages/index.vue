@@ -5,9 +5,10 @@ import { renderBlock } from '@cms/ui'
 import { SelectableBlock } from '@cms/ui/wrappers'
 
 const page = ref<Page | null>(null)
+let isEditor: boolean = true;
 
 // carga normal
-const { data } = await useFetch<Page>('/api/page/home')
+const { data } = await useAsyncData<Page>('home', () => $fetch('/api/page/home'))
 page.value = data.value || null
 
 function onBlockSelect(blockId: string) {
@@ -27,7 +28,8 @@ onMounted(() => {
 </script>
 
 <template>
-  <SelectableBlock
+  <SelectableBlock 
+    v-if="isEditor"
     v-for="block in page?.blocks || []"
     :key="block.id"
     :block-id="block.id"

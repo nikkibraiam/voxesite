@@ -1,4 +1,8 @@
 export default defineNuxtConfig({
+  ssr: true,
+  nitro: {
+    preset: 'static'
+  },
   build: {
     transpile: ["@cms/ui", "@cms/contracts"],
   },

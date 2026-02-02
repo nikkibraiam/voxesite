@@ -1,0 +1,1 @@
+Para poder hacer deploy de los archivos estaticos se debe desde apps/runtime, ejecutar pnpm run generate

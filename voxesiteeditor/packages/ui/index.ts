@@ -1,1 +1,1 @@
-export * from './renderer/renderComponent'
+export { renderBlock } from './renderer/renderComponent'

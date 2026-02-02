@@ -55,6 +55,9 @@ importers:
       '@cms/contracts':
         specifier: workspace:*
         version: link:../contracts
+      vue:
+        specifier: ^3.5.0
+        version: 3.5.27(typescript@5.9.3)
 
   packages/utils: {}
 
