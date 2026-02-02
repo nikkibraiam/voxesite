@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { ref, watch } from 'vue'
 import { BlockSchemas } from '@cms/ui/schemas'
 import { Modal } from '@cms/ui/base-components'
 import type { Block } from '@cms/contracts'
@@ -8,33 +8,49 @@ const props = defineProps<{
   block: Block | null
 }>()
 
-const typedBlock = computed(() => {
-  if (!props.block) return null
-  return props.block
-})
+const emit = defineEmits<{
+  (e: 'apply', block: Block): void
+  (e: 'close'): void
+}>()
+
+const draft = ref<Block | null>(null)
+
+watch(
+  () => props.block,
+  (newBlock) => {
+    draft.value = newBlock
+      ? structuredClone(toRaw(newBlock))
+      : null
+  },
+  { immediate: true }
+)
 
 const schema = computed(() => {
-  if (!props.block) return null
-  return BlockSchemas[props.block.type]
+  if (!draft.value) return null
+  return BlockSchemas[draft.value.type]
 })
 
-function resolveFieldComponent(field: any) {
-  if (field.type === 'color') return 'input'
-  return 'input'
+function applyChanges() {
+  if (!draft.value) return
+  emit('apply', draft.value)
 }
 </script>
 
 <template>
-<Modal v-if="typedBlock && schema">
-  <h3>{{ schema.label }}</h3>
+  <Modal v-if="draft && schema">
+    <h3>{{ schema.label }}</h3>
 
-  <div v-for="field in schema.fields" :key="field.key">
-    <label>{{ field.label }}</label>
+    <div v-for="field in schema.fields" :key="field.key">
+      <label>{{ field.label }}</label>
 
-    <component
-    :is="resolveFieldComponent(field)"
-    v-model="(typedBlock.props as Record<string, any>)[field.key]"
-    />
-  </div>
-</Modal>
+      <input
+        v-model="(draft.props as Record<string, any>)[field.key]"
+      />
+    </div>
+
+    <div class="actions">
+      <button @click="emit('close')">Cancelar</button>
+      <button @click="applyChanges">Aplicar</button>
+    </div>
+  </Modal>
 </template>

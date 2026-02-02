@@ -28,6 +28,16 @@ function addText() {
   })
 }
 
+function applyBlockChanges(updated: Block) {
+  const index = page.value.blocks.findIndex(
+    b => b.id === updated.id
+  )
+
+  if (index !== -1) {
+    page.value.blocks[index] = updated
+  }
+}
+
 onMounted(() => {
   window.addEventListener('message', (event) => {
     if (event.data?.type === 'BLOCK_SELECT') {
@@ -63,5 +73,9 @@ const selectedBlock = computed<Block | null>(() => {
     height="400"
   />
 
-  <BlockEditorModal :block="selectedBlock" />
+  <BlockEditorModal
+  :block="selectedBlock"
+  @apply="applyBlockChanges"
+  @close="selectedBlockId = null"
+/>
 </template>
