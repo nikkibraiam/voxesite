@@ -12,7 +12,7 @@ const isEditor = process.client && window !== window.parent
 
 const { data } = await useAsyncData<Page>(
   `page-${slug}`,
-  () => $fetch(`/api/page/${slug}`)
+  () => $fetch(`/api/pages/${slug}`)
 )
 
 page.value = data.value ?? null
@@ -25,7 +25,7 @@ watch(page, (p) => {
       {
         id: 'cms-page-styles',
         rel: 'stylesheet',
-        href: `/cms/pages/${p.id}.css`
+        href: `/api/pages/${slug}.css?t=${Date.now()}`
       }
     ]
   })

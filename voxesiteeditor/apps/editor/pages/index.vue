@@ -25,19 +25,29 @@ function generatePageCss(page: Page) {
 }
 
 
-function savePageCss(page: Page) {
+async function savePageCss(page: Page) {
   const css = generatePageCss(page)
 
+  // 1️⃣ Preview en el editor
   const styleId = 'cms-inline-styles'
   let style = document.getElementById(styleId) as HTMLStyleElement
-
   if (!style) {
     style = document.createElement('style')
     style.id = styleId
     document.head.appendChild(style)
   }
-
   style.innerHTML = css
+
+  // 2️⃣ Guardar CSS en el backend
+  try {
+    await $fetch(`/api/pages/${page.slug}/css`, {
+      method: 'POST',
+      body: { css }
+    })
+    console.log('CSS guardado en disco ✅')
+  } catch (err) {
+    console.error('Error guardando CSS:', err)
+  }
 }
 
 function reloadPageCss(slug: string) {
@@ -50,8 +60,9 @@ function reloadPageCss(slug: string) {
     document.head.appendChild(link)
   }
 
-  link.href = `/cms/pages/${slug}.css?t=${Date.now()}`
+  link.href = `/api/pages/${slug}.css?t=${Date.now()}`
 }
+
 
 function addHero() {
   page.value.blocks.push({
@@ -73,19 +84,26 @@ function applyBlockChanges(updated: BaseBlock) {
   const index = page.value.blocks.findIndex(
     b => b.id === updated.id
   )
+  page.slug = 'home'
 
   if (index !== -1) {
     page.value.blocks[index] = updated
   }
 
   savePageCss(page.value)
-  reloadPageCss(page.value.id)
 }
 
 async function savePage() {
-  await $fetch('/api/page', {
+  await $fetch('/api/pages', {
     method: 'POST',
     body: toRaw(page.value)
+  })
+
+  Guardar CSS en disco
+  const css = generatePageCss(page.value)
+  await $fetch(`/api/pages/${page.slug}/css`, {
+    method: 'POST',
+    body: { css }
   })
 
   alert('Página guardada 🚀')

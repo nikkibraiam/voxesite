@@ -1,0 +1,153 @@
+diff --git a/voxesiteeditor/apps/editor/pages/index.vue b/voxesiteeditor/apps/editor/pages/index.vue
+index 6da0654..fd6174b 100644
+--- a/voxesiteeditor/apps/editor/pages/index.vue
++++ b/voxesiteeditor/apps/editor/pages/index.vue
+@@ -25,19 +25,29 @@ function generatePageCss(page: Page) {
+ }
+ 
+ 
+-function savePageCss(page: Page) {
++async function savePageCss(page: Page) {
+   const css = generatePageCss(page)
+ 
++  // 1️⃣ Preview en el editor
+   const styleId = 'cms-inline-styles'
+   let style = document.getElementById(styleId) as HTMLStyleElement
+-
+   if (!style) {
+     style = document.createElement('style')
+     style.id = styleId
+     document.head.appendChild(style)
+   }
+-
+   style.innerHTML = css
++
++  // 2️⃣ Guardar CSS en el backend
++  // try {
++  //   await $fetch(`/api/pages/${page.slug}/css`, {
++  //     method: 'POST',
++  //     body: { css }
++  //   })
++  //   console.log('CSS guardado en disco ✅')
++  // } catch (err) {
++  //   console.error('Error guardando CSS:', err)
++  // }
+ }
+ 
+ function reloadPageCss(slug: string) {
+@@ -50,9 +60,10 @@ function reloadPageCss(slug: string) {
+     document.head.appendChild(link)
+   }
+ 
+-  link.href = `/cms/pages/${slug}.css?t=${Date.now()}`
++  // link.href = `/api/pages/${slug}.css?t=${Date.now()}`
+ }
+ 
++
+ function addHero() {
+   page.value.blocks.push({
+     id: crypto.randomUUID(),
+@@ -73,20 +84,27 @@ function applyBlockChanges(updated: BaseBlock) {
+   const index = page.value.blocks.findIndex(
+     b => b.id === updated.id
+   )
++  // page.slug = 'home'
+ 
+   if (index !== -1) {
+     page.value.blocks[index] = updated
+   }
+ 
+   savePageCss(page.value)
+-  reloadPageCss(page.value.id)
+ }
+ 
+ async function savePage() {
+-  await $fetch('/api/page', {
+-    method: 'POST',
+-    body: toRaw(page.value)
+-  })
++  // await $fetch('/api/pages', {
++  //   method: 'POST',
++  //   body: toRaw(page.value)
++  // })
++
++  // Guardar CSS en disco
++  // const css = generatePageCss(page.value)
++  // await $fetch(`/api/pages/${page.slug}/css`, {
++  //   method: 'POST',
++  //   body: { css }
++  // })
+ 
+   alert('Página guardada 🚀')
+ }
+diff --git a/voxesiteeditor/apps/editor/server/api/page.post.ts b/voxesiteeditor/apps/editor/server/api/page.post.ts
+index 39bcfc3..272373c 100644
+--- a/voxesiteeditor/apps/editor/server/api/page.post.ts
++++ b/voxesiteeditor/apps/editor/server/api/page.post.ts
+@@ -1,14 +1,19 @@
+-import { writeFile } from 'fs/promises'
++import { writeFile, mkdir } from 'fs/promises'
++import { join } from 'path'
+ import type { Page } from '@cms/contracts'
+ 
+ export default defineEventHandler(async (event) => {
+   const page = await readBody<Page>(event)
+ 
+-  await writeFile(
+-    `./data/pages/${page.slug}.json`,
+-    JSON.stringify(page, null, 2),
+-    'utf-8'
+-  )
++  // const basePath = join(process.cwd(), 'data/pages')
++
++  // await mkdir(basePath, { recursive: true })
++
++  // await writeFile(
++  //   join(basePath, `${page.slug}.json`),
++  //   JSON.stringify(page, null, 2),
++  //   'utf-8'
++  // )
+ 
+   return { ok: true }
+ })
+diff --git a/voxesiteeditor/apps/runtime/pages/[slug].vue b/voxesiteeditor/apps/runtime/pages/[slug].vue
+index 53d6edb..509cac8 100644
+--- a/voxesiteeditor/apps/runtime/pages/[slug].vue
++++ b/voxesiteeditor/apps/runtime/pages/[slug].vue
+@@ -12,7 +12,7 @@ const isEditor = process.client && window !== window.parent
+ 
+ const { data } = await useAsyncData<Page>(
+   `page-${slug}`,
+-  () => $fetch(`/api/page/${slug}`)
++  () => $fetch(`/api/pages/${slug}`)
+ )
+ 
+ page.value = data.value ?? null
+@@ -25,7 +25,7 @@ watch(page, (p) => {
+       {
+         id: 'cms-page-styles',
+         rel: 'stylesheet',
+-        href: `/cms/pages/${p.id}.css`
++        href: `/api/pages/${slug}.css?t=${Date.now()}`
+       }
+     ]
+   })
+diff --git a/voxesiteeditor/apps/runtime/server/api/page/[slug].get.ts b/voxesiteeditor/apps/runtime/server/api/page/[slug].get.ts
+deleted file mode 100644
+index 600b8d4..0000000
+--- a/voxesiteeditor/apps/runtime/server/api/page/[slug].get.ts
++++ /dev/null
+@@ -1,13 +0,0 @@
+-import { readFile } from 'fs/promises'
+-import type { Page } from '@cms/contracts'
+-
+-export default defineEventHandler(async (event): Promise<Page> => {
+-  const slug = event.context.params!.slug
+-
+-  const json = await readFile(
+-    `./data/pages/${slug}.json`,
+-    'utf-8'
+-  )
+-
+-  return JSON.parse(json)
+-})
