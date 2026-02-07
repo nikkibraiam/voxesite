@@ -1,9 +1,18 @@
 import type { HeroBlock } from './blocks/hero'
 import type { TextBlock } from './blocks/text'
 
-export type Block =
-  | HeroBlock
-  | TextBlock
+export type BlockStyles = {
+  [selector: string]: {
+    [cssProperty: string]: string
+  }
+}
+
+export type BaseBlock<TType extends string, TProps> = {
+  id: string
+  type: TType
+  props: TProps
+  styles?: BlockStyles
+}
 
 export type Page = {
   id: string
@@ -12,5 +21,5 @@ export type Page = {
     title: string
     description?: string
   }
-  blocks: Block[]
+  blocks: BaseBlock[]
 }

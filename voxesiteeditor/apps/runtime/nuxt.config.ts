@@ -4,7 +4,7 @@ export default defineNuxtConfig({
     preset: 'static'
   },
   build: {
-    transpile: ["@cms/ui", "@cms/contracts"],
+    transpile: ["@cms/ui", "@cms/contracts", "@cms/utils"],
   },
   vite: {
     server: {
@@ -13,7 +13,7 @@ export default defineNuxtConfig({
       },
     },
     optimizeDeps: {
-      exclude: ["@cms/ui", "@cms/contracts"],
+      exclude: ["@cms/ui", "@cms/contracts", "@cms/utils"],
     },
   },
   devServer: {

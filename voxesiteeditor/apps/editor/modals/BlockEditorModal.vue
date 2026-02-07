@@ -1,19 +1,19 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, computed, toRaw } from 'vue'
 import { BlockSchemas } from '@cms/ui/schemas'
 import { Modal } from '@cms/ui/base-components'
-import type { Block } from '@cms/contracts'
+import type { BaseBlock, BlockStyles } from '@cms/contracts'
 
 const props = defineProps<{
-  block: Block | null
+  block: BaseBlock<any, any> | null
 }>()
 
 const emit = defineEmits<{
-  (e: 'apply', block: Block): void
+  (e: 'apply', block: BaseBlock<any, any>): void
   (e: 'close'): void
 }>()
 
-const draft = ref<Block | null>(null)
+const draft = ref<BaseBlock<any, any> | null>(null)
 
 watch(
   () => props.block,
@@ -30,6 +30,24 @@ const schema = computed(() => {
   return BlockSchemas[draft.value.type]
 })
 
+function updateStyle(
+  selector: string,
+  cssProperty: string,
+  value: string
+) {
+  if (!draft.value) return
+
+  if (!draft.value.styles) {
+    draft.value.styles = {}
+  }
+
+  if (!draft.value.styles[selector]) {
+    draft.value.styles[selector] = {}
+  }
+
+  draft.value.styles[selector][cssProperty] = value
+}
+
 function applyChanges() {
   if (!draft.value) return
   emit('apply', draft.value)
@@ -38,14 +56,42 @@ function applyChanges() {
 
 <template>
   <Modal v-if="draft && schema">
-    <h3>{{ schema.label }}</h3>
+    <h3>{{ draft.type }}</h3>
 
-    <div v-for="field in schema.fields" :key="field.key">
+    <!-- 🧩 CONTENIDO -->
+    <h4>Contenido</h4>
+    <div
+      v-for="field in schema.content.fields"
+      :key="field.key"
+    >
       <label>{{ field.label }}</label>
-
       <input
-        v-model="(draft.props as Record<string, any>)[field.key]"
+        v-model="draft.props[field.key]"
       />
+    </div>
+
+    <!-- 🎨 ESTILOS -->
+    <div
+      v-for="group in schema.styles"
+      :key="group.group"
+    >
+      <h4>{{ group.group }}</h4>
+
+      <div
+        v-for="field in group.fields"
+        :key="field.key"
+      >
+        <label>{{ field.label }}</label>
+
+        <input
+          :type="field.type === 'color' ? 'color' : 'text'"
+          @input="e => updateStyle(
+            field.selector,
+            field.cssProperty,
+            (e.target as HTMLInputElement).value
+          )"
+        />
+      </div>
     </div>
 
     <div class="actions">

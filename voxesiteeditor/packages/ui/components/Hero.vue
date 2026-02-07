@@ -1,44 +1,37 @@
 <script setup lang="ts">
-interface HeroProps {
-  title: string
-  subtitle?: string
-  description?: string
-  image?: string
-  ctaText?: string
-  ctaHref?: string
-  align?: 'left' | 'center' | 'right'
-}
+import { HeroBlock } from '@cms/contracts'
+import { computed } from 'vue';
 
-const props = withDefaults(defineProps<HeroProps>(), {
-  align: 'center',
-})
+const props = defineProps<HeroBlock['props']>()
+const baseClass = 'hero__content'
+const classes = computed(() => [
+  baseClass,
+  props.class
+])
 </script>
 
 <template>
-  <section class="hero" :class="`hero--${align}`">
-    <div class="hero__content">
+  <section class="hero">
+    <div :class="classes">
       <h1 class="hero__title">{{ title }}</h1>
 
       <h2 v-if="subtitle" class="hero__subtitle">
         {{ subtitle }}
       </h2>
 
-      <p v-if="description" class="hero__description">
-        {{ description }}
+      <p v-if="props.subtitle" class="hero__description">
+        {{ props.subtitle }}
       </p>
 
       <a
-        v-if="ctaText && ctaHref"
-        :href="ctaHref"
+        v-if="ctaText && props.ctaText"
+        :href="props.ctaText"
         class="hero__cta"
       >
         {{ ctaText }}
       </a>
     </div>
 
-    <div v-if="image" class="hero__image">
-      <img :src="image" :alt="title" />
-    </div>
   </section>
 </template>
 

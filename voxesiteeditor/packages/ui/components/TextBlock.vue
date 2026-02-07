@@ -1,14 +1,21 @@
 <script setup lang="ts">
 import type { TextBlock } from '@cms/contracts'
+import { computed } from 'vue';
 
 const props = defineProps<TextBlock['props']>()
+const baseClass = 'text-block'
+
+const classes = computed(() => [
+  baseClass,
+  props.class
+])
 </script>
 
 <template>
   <section class="text-block">
-    <p class="text">
-      {{ props.text }}
-    </p>
+    <div :class="classes">
+      <p class="text" v-html="text" />
+    </div>
   </section>
 </template>
 
@@ -20,6 +27,6 @@ const props = defineProps<TextBlock['props']>()
 .text {
   font-size: 1rem;
   line-height: 1.6;
-  color: #1f2937; /* gris elegante */
+  color: #13376a;
 }
 </style>

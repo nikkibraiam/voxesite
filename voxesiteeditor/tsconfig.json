@@ -4,7 +4,8 @@
     "moduleResolution": "bundler",
     "target": "ESNext",
     "module": "ESNext",
+    "lib": ["ESNext"],
     "jsx": "preserve",
-     "types": ["node", "vite/client"]
+    "types": ["node", "vite/client"]
   }
 }

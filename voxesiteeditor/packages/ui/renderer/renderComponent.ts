@@ -1,15 +1,22 @@
-import { defineAsyncComponent } from 'vue'
-import type { Block } from '@cms/contracts'
+import { h, defineAsyncComponent } from 'vue'
+import type { BaseBlock } from '@cms/contracts'
 
-const components = import.meta.glob('../components/*.vue')
 
-export function renderBlock(block: Block) {
-  const loader = components[`../components/${block.type}.vue`]
+const registry: Record<string, ReturnType<typeof defineAsyncComponent>> = {
+  TextBlock: defineAsyncComponent(() => import('../components/TextBlock.vue')),
+  Hero: defineAsyncComponent(() => import('../components/Hero.vue'))
+}
 
-  if (!loader) {
+export function renderBlock(block: BaseBlock) {
+  const Component = registry[block.type]
+
+  if (!Component) {
     console.warn(`Block type "${block.type}" not registered`)
     return null
   }
 
-  return defineAsyncComponent(loader as any)
+  return h(Component, {
+    class: [`block-${block.id}`, block.props.class],
+    ...block.props
+  })
 }
