@@ -5,15 +5,15 @@ import { Modal } from '@cms/ui/base-components'
 import type { BaseBlock, BlockStyles } from '@cms/contracts'
 
 const props = defineProps<{
-  block: BaseBlock<any, any> | null
+  block: BaseBlock<string, any> | null
 }>()
 
 const emit = defineEmits<{
-  (e: 'apply', block: BaseBlock<any, any>): void
+  (e: 'apply', block: BaseBlock<string, any>): void
   (e: 'close'): void
 }>()
 
-const draft = ref<BaseBlock<any, any> | null>(null)
+const draft = ref<BaseBlock<string, any> | null>(null)
 
 watch(
   () => props.block,

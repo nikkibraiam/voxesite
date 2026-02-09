@@ -3,12 +3,14 @@ import { join } from 'path'
 
 export default defineEventHandler(async (event) => {
   const slug = event.context.params!.slug
+  const filePath = join(process.cwd(), '../../data/pages', `${slug}.css`)
+
+  setHeader(event, 'Content-Type', 'text/css')
+
   try {
-    const css = await readFile(join(process.cwd(), 'data/pages', `${slug}.css`), 'utf-8')
-    event.res.setHeader('Content-Type', 'text/css')
-    return css
+    return await readFile(filePath, 'utf-8')
   } catch {
-    event.res.statusCode = 404
+    // CSS vacío, pero request exitoso
     return ''
   }
 })

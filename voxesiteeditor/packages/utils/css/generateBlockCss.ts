@@ -10,18 +10,22 @@ const ALLOWED_PROPERTIES = [
   'text-align'
 ]
 
-export function generateBlockCss(
-  block: BaseBlock
-) {
+export function generateBlockCss(block: BaseBlock<string, any>) {
   if (!block.styles) return ''
 
   let css = ''
+  const scope = `.block-${block.id}`
 
   for (const selector in block.styles) {
+    const scopedSelectors = selector
+      .split(',')
+      .map(s => `${scope} ${s.trim()}`)
+      .join(', ')
+
     css += `
-.block-${block.id} ${selector} {
+${scopedSelectors} {
 ${Object.entries(block.styles[selector])
-  .map(([k, v]) => `  ${k}: ${v};`)
+  .map(([prop, value]) => `  ${prop}: ${value};`)
   .join('\n')}
 }
 `
@@ -29,3 +33,5 @@ ${Object.entries(block.styles[selector])
 
   return css
 }
+
+

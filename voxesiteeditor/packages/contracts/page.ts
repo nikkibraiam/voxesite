@@ -21,5 +21,5 @@ export type Page = {
     title: string
     description?: string
   }
-  blocks: BaseBlock[]
+  blocks: BaseBlock<string, any>[]
 }

@@ -9,8 +9,8 @@ const previewFrame = ref<HTMLIFrameElement | null>(null)
 const selectedBlockId = ref<string | null>(null)
 
 const page = ref<Page>({
-  id: 'home',
-  slug: '/',
+  id: '2a8dda0d-be2d-4e13-b6f8-effaf1058def',
+  slug: 'home',
   blocks: []
 })
 
@@ -80,11 +80,10 @@ function addText() {
   })
 }
 
-function applyBlockChanges(updated: BaseBlock) {
+function applyBlockChanges(updated: BaseBlock<string, any>) {
   const index = page.value.blocks.findIndex(
     b => b.id === updated.id
   )
-  page.slug = 'home'
 
   if (index !== -1) {
     page.value.blocks[index] = updated
@@ -99,9 +98,8 @@ async function savePage() {
     body: toRaw(page.value)
   })
 
-  Guardar CSS en disco
   const css = generatePageCss(page.value)
-  await $fetch(`/api/pages/${page.slug}/css`, {
+  await $fetch(`/api/pages/${page.value.slug}/css`, {
     method: 'POST',
     body: { css }
   })
@@ -129,7 +127,7 @@ watch(
   { deep: true }
 )
 
-const selectedBlock = computed<BaseBlock | null>(() => {
+const selectedBlock = computed<BaseBlock<string, any> | null>(() => {
   return page.value.blocks.find(b => b.id === selectedBlockId.value) ?? null
 })
 </script>

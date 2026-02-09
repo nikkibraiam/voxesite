@@ -7,7 +7,7 @@ const registry: Record<string, ReturnType<typeof defineAsyncComponent>> = {
   Hero: defineAsyncComponent(() => import('../components/Hero.vue'))
 }
 
-export function renderBlock(block: BaseBlock) {
+export function renderBlock(block: BaseBlock<string, any>) {
   const Component = registry[block.type]
 
   if (!Component) {

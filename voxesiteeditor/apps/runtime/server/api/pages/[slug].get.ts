@@ -5,7 +5,7 @@ import type { Page } from '@cms/contracts'
 
 export default defineEventHandler(async (event): Promise<Page> => {
   const slug = event.context.params!.slug
-  const filePath = join(process.cwd(), 'data/pages', `${slug}.json`)
+  const filePath = join(process.cwd(), '../../data/pages', `${slug}.json`)
 
   try {
     const json = await readFile(filePath, 'utf-8')
