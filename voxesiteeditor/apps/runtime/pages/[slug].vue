@@ -25,7 +25,7 @@ watch(page, (p) => {
       {
         id: 'cms-page-styles',
         rel: 'stylesheet',
-        href: `/api/pages/${slug}.css?t=${Date.now()}`
+        href: `/api/pages/${slug}/style?t=${Date.now()}`
       }
     ]
   })

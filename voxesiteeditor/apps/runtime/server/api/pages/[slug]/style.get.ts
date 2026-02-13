@@ -2,11 +2,11 @@ import { readFile } from 'fs/promises'
 import { join } from 'path'
 
 export default defineEventHandler(async (event) => {
-  const slug = event.context.params!.slug
+  const slug = event.context.params?.slug
+
   const filePath = join(process.cwd(), '../../data/pages', `${slug}.css`)
   
   setHeader(event, 'Content-Type', 'text/css')
-  setHeader(event, 'X-property', 'braiam')  
   try {
     return await readFile(filePath, 'utf-8')
   } catch {

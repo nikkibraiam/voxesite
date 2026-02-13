@@ -50,19 +50,6 @@ async function savePageCss(page: Page) {
   }
 }
 
-function reloadPageCss(slug: string) {
-  let link = document.getElementById('cms-page-styles') as HTMLLinkElement
-
-  if (!link) {
-    link = document.createElement('link')
-    link.id = 'cms-page-styles'
-    link.rel = 'stylesheet'
-    document.head.appendChild(link)
-  }
-
-  link.href = `/api/pages/${slug}.css?t=${Date.now()}`
-}
-
 
 function addHero() {
   page.value.blocks.push({
