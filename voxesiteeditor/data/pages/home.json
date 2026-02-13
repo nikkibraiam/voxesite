@@ -1,0 +1,18 @@
+{
+  "id": "2a8dda0d-be2d-4e13-b6f8-effaf1058def",
+  "slug": "home",
+  "blocks": [
+    {
+      "id": "d4e0a0f4-3cfb-4880-bf64-f5e9c8c37fcf",
+      "type": "Hero",
+      "props": {
+        "title": "Hero desde editor"
+      },
+      "styles": {
+        ".text, .hero__title, .hero__subtitle": {
+          "color": "#a81a1a"
+        }
+      }
+    }
+  ]
+}

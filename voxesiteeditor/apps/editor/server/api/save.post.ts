@@ -1,4 +1,3 @@
-// apps/editor/server/api/page.post.ts
 import { writeFile, mkdir } from 'fs/promises'
 import { join } from 'path'
 import type { Page } from '@cms/contracts'

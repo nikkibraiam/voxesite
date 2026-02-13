@@ -80,7 +80,7 @@ function applyBlockChanges(updated: BaseBlock<string, any>) {
 }
 
 async function savePage() {
-  await $fetch('/api/pages', {
+  await $fetch('/api/save', {
     method: 'POST',
     body: toRaw(page.value)
   })
