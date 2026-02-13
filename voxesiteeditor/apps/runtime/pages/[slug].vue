@@ -25,16 +25,15 @@ watch(page, () => {
   styleVersion.value = Date.now()
 })
 
+const isDev = process.dev
+
 useHead({
   link: [
     {
-      key: 'cms-page-styles',
       rel: 'stylesheet',
-      href: computed(() =>
-        page.value
-          ? `/api/pages/${slug}/style?t=${styleVersion.value}`
-          : ''
-      )
+      href: isDev
+        ? `/api/pages/${slug}/style?t=${styleVersion.value}`
+        : `/generated-css/${slug}.css`
     }
   ]
 })

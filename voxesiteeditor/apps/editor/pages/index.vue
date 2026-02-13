@@ -67,7 +67,11 @@ async function savePage() {
 }
 
 async function publishSite(){
-  await $fetch('/api/build')
+  await $fetch('/api/build', {
+    method: 'POST',
+    body: {}
+  })
+  alert('Sitio publicado')
 }
 
 

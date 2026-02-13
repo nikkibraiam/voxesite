@@ -3,16 +3,17 @@
   "slug": "home",
   "blocks": [
     {
-      "id": "8cfe280f-5f1e-453b-aebc-41c68c62a9f6",
+      "id": "3af66a38-ff50-4e5a-949e-6c5758068467",
       "type": "Hero",
       "props": {
-        "title": "Hero desde editor"
+        "title": "Hero desde editor Jessi"
       },
       "styles": {
         ".text, .hero__title, .hero__subtitle": {
-          "color": "#ff1a1a"
+          "color": "#282ff0"
         }
       }
     }
-  ]
+  ],
+  "cssFile": "/generated-css/home.css"
 }
