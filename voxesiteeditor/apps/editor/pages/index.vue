@@ -30,7 +30,7 @@ function addText() {
   })
 }
 
-function applyBlockChanges(updated: BaseBlock<string, any>) {
+async function applyBlockChanges(updated: BaseBlock<string, any>) {
   const index = page.value.blocks.findIndex(
     b => b.id === updated.id
   )
@@ -38,6 +38,17 @@ function applyBlockChanges(updated: BaseBlock<string, any>) {
   if (index !== -1) {
     page.value.blocks[index] = updated
   }
+
+  await $fetch('/api/save', {
+    method: 'POST',
+    body: toRaw(page.value)
+  })
+
+  // 🔥 avisamos al runtime que recargue estilos
+  previewFrame.value?.contentWindow?.postMessage(
+    { type: 'PAGE_SAVED' },
+    'http://localhost:3001'
+  )
 }
 
 async function savePage() {
@@ -57,7 +68,7 @@ async function savePage() {
 
 
 onMounted(() => {
-  window.addEventListener('message', (event) => {
+  window.addEventListener('message', (event) => { 
     if (event.data?.type === 'BLOCK_SELECT') {
       selectedBlockId.value = event.data.blockId
     }
