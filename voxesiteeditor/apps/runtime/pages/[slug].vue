@@ -7,15 +7,17 @@ import { SelectableBlock } from '@cms/ui/wrappers'
 const route = useRoute()
 const slug = route.params.slug as string
 
-const page = ref<Page | null>(null)
+const pages = import.meta.glob('/public/data/pages/*.json', {
+  eager: true,
+  import: 'default'
+})
+
+const page = ref<Page | null>(
+  pages[`/public/data/pages/${slug}.json`] as Page || null
+)
 const isEditor = process.client && window !== window.parent
 
-const { data } = await useAsyncData<Page>(
-  `page-${slug}`,
-  () => $fetch(`/data/pages/${slug}.json`)
-)
 
-page.value = data.value ?? null
 
 const styleVersion = ref(Date.now())
 

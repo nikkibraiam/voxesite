@@ -3,14 +3,14 @@
   "slug": "home",
   "blocks": [
     {
-      "id": "1f9788c3-8137-4d66-9366-e57923b5c358",
+      "id": "8cfe280f-5f1e-453b-aebc-41c68c62a9f6",
       "type": "Hero",
       "props": {
-        "title": "Hero desde edit"
+        "title": "Hero desde editor"
       },
       "styles": {
         ".text, .hero__title, .hero__subtitle": {
-          "color": "#db0f0f"
+          "color": "#ff1a1a"
         }
       }
     }

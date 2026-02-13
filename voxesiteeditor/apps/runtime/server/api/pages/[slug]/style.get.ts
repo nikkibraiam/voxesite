@@ -21,7 +21,8 @@ function generateCSS(page: Page): string {
 export default defineEventHandler(async (event) => {
   const slug = event.context.params?.slug
   const dir = resolve(process.cwd(), 'public/data/pages')
-  const filePath = join(process.cwd(), dir, `${slug}.json`)
+
+  const filePath = join(dir, `${slug}.json`)
 
   try {
     const raw = await readFile(filePath, 'utf-8')
