@@ -46,6 +46,9 @@ function updateStyle(
   }
 
   draft.value.styles[selector][cssProperty] = value
+
+  // 🔥 emitir cambio en tiempo real
+  emit('apply', structuredClone(toRaw(draft.value)))
 }
 
 function applyChanges() {
@@ -66,7 +69,7 @@ function applyChanges() {
     >
       <label>{{ field.label }}</label>
       <input
-        v-model="draft.props[field.key]"
+        v-model="draft.props[field.key]" @input="applyChanges"
       />
     </div>
 
