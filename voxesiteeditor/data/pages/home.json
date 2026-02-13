@@ -3,15 +3,10 @@
   "slug": "home",
   "blocks": [
     {
-      "id": "e4815046-ddf4-4f87-8c6b-0cacf0be43a2",
+      "id": "d8784c0a-eef3-4a3c-94ab-07d8fe59f300",
       "type": "Hero",
       "props": {
         "title": "Hero desde editor"
-      },
-      "styles": {
-        ".text, .hero__title, .hero__subtitle": {
-          "color": "#0b00a8"
-        }
       }
     }
   ]

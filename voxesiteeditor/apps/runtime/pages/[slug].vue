@@ -51,6 +51,13 @@ onMounted(() => {
 
   window.addEventListener('message', (event) => {
     if (event.origin !== 'http://localhost:3000') return
+
+    if (event.data?.type === 'PAGE_SAVED') {
+      styleVersion.value = Date.now()
+      return
+    }
+
+    // preview en vivo (cuando cambia page sin guardar)
     page.value = event.data as Page
   })
 })
@@ -58,19 +65,10 @@ onMounted(() => {
 
 <template>
   <template v-for="block in page?.blocks || []" :key="block.id">
-    <SelectableBlock
-      v-if="isEditor"
-      :block-id="block.id"
-      enabled
-      @select="onBlockSelect"
-    >
+    <SelectableBlock v-if="isEditor" :block-id="block.id" enabled @select="onBlockSelect">
       <component :is="renderBlock(block)" v-bind="block.props" />
     </SelectableBlock>
 
-    <component
-      v-else
-      :is="renderBlock(block)"
-      v-bind="block.props"
-    />
+    <component v-else :is="renderBlock(block)" v-bind="block.props" />
   </template>
 </template>

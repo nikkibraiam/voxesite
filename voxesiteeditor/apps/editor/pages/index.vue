@@ -2,7 +2,6 @@
 import { ref, watch, toRaw, onMounted, computed } from 'vue'
 import type { Page, BaseBlock } from '@cms/contracts'
 import BlockEditorModal from '../modals/BlockEditorModal.vue'
-import { generateBlockCss } from '@cms/utils'
 
 
 const previewFrame = ref<HTMLIFrameElement | null>(null)
@@ -13,42 +12,6 @@ const page = ref<Page>({
   slug: 'home',
   blocks: []
 })
-
-function generatePageCss(page: Page) {
-  let css = ''
-
-  for (const block of page.blocks) {
-    css += generateBlockCss(block)
-  }
-
-  return css
-}
-
-
-async function savePageCss(page: Page) {
-  const css = generatePageCss(page)
-
-  // 1️⃣ Preview en el editor
-  const styleId = 'cms-inline-styles'
-  let style = document.getElementById(styleId) as HTMLStyleElement
-  if (!style) {
-    style = document.createElement('style')
-    style.id = styleId
-    document.head.appendChild(style)
-  }
-  style.innerHTML = css
-
-  // 2️⃣ Guardar CSS en el backend
-  try {
-    await $fetch(`/api/pages/${page.slug}/css`, {
-      method: 'POST',
-      body: { css }
-    })
-    console.log('CSS guardado en disco ✅')
-  } catch (err) {
-    console.error('Error guardando CSS:', err)
-  }
-}
 
 
 function addHero() {
@@ -75,8 +38,6 @@ function applyBlockChanges(updated: BaseBlock<string, any>) {
   if (index !== -1) {
     page.value.blocks[index] = updated
   }
-
-  savePageCss(page.value)
 }
 
 async function savePage() {
@@ -85,11 +46,11 @@ async function savePage() {
     body: toRaw(page.value)
   })
 
-  const css = generatePageCss(page.value)
-  await $fetch(`/api/pages/${page.value.slug}/css`, {
-    method: 'POST',
-    body: { css }
-  })
+  // 🔥 avisamos al runtime que recargue estilos
+  previewFrame.value?.contentWindow?.postMessage(
+    { type: 'PAGE_SAVED' },
+    'http://localhost:3001'
+  )
 
   alert('Página guardada 🚀')
 }
@@ -123,17 +84,8 @@ const selectedBlock = computed<BaseBlock<string, any> | null>(() => {
   <button @click="addHero">Hero</button>
   <button @click="addText">Text</button>
 
-  <iframe
-    ref="previewFrame"
-    src="http://localhost:3001"
-    width="100%"
-    height="400"
-  />
+  <iframe ref="previewFrame" src="http://localhost:3001" width="100%" height="400" />
   <button @click="savePage">Guardar página</button>
 
-  <BlockEditorModal
-  :block="selectedBlock"
-  @apply="applyBlockChanges"
-  @close="selectedBlockId = null"
-/>
+  <BlockEditorModal :block="selectedBlock" @apply="applyBlockChanges" @close="selectedBlockId = null" />
 </template>
