@@ -10,3 +10,9 @@ pnpm -F runtime build
 pnpm -F editor build
 
 pnpm dev
+
+
+para generar una vista del proyecto con todos los files necesarios
+
+find . -type f -not -path "*/node_modules/*" -not -path "*/.nuxt/*"  -not -path "*/.output/*"   -not -path "*/dist/*" 
+

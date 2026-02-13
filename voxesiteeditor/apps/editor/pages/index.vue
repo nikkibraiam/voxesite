@@ -66,12 +66,17 @@ async function savePage() {
   alert('Página guardada 🚀')
 }
 
-async function publishSite(){
-  await $fetch('/api/build', {
+async function publishSite(siteId: string){
+  if (!siteId) {
+    alert('No hay siteId definido')
+    return
+  }
+
+  await $fetch('http://localhost:2999/api/build', {
     method: 'POST',
-    body: {}
+    body: { siteId }
   })
-  alert('Sitio publicado')
+  alert(`Sitio publicado: ${siteId}`)
 }
 
 
@@ -105,7 +110,7 @@ const selectedBlock = computed<BaseBlock<string, any> | null>(() => {
 
   <iframe ref="previewFrame" src="http://localhost:3001" width="100%" height="400" />
   <button @click="savePage">Guardar página</button>
-  <button @click="publishSite">Publicar</button>
+  <button @click="publishSite('demosite')">Publicar</button>
 
   <BlockEditorModal :block="selectedBlock" @apply="applyBlockChanges" @close="selectedBlockId = null" />
 </template>
