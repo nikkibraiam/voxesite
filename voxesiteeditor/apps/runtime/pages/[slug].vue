@@ -12,7 +12,7 @@ const isEditor = process.client && window !== window.parent
 
 const { data } = await useAsyncData<Page>(
   `page-${slug}`,
-  () => $fetch(`/api/pages/${slug}`)
+  () => $fetch(`/data/pages/${slug}.json`)
 )
 
 page.value = data.value ?? null

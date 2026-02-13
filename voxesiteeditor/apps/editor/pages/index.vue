@@ -66,6 +66,10 @@ async function savePage() {
   alert('Página guardada 🚀')
 }
 
+async function publishSite(){
+  await $fetch('/api/build')
+}
+
 
 onMounted(() => {
   window.addEventListener('message', (event) => { 
@@ -97,6 +101,7 @@ const selectedBlock = computed<BaseBlock<string, any> | null>(() => {
 
   <iframe ref="previewFrame" src="http://localhost:3001" width="100%" height="400" />
   <button @click="savePage">Guardar página</button>
+  <button @click="publishSite">Publicar</button>
 
   <BlockEditorModal :block="selectedBlock" @apply="applyBlockChanges" @close="selectedBlockId = null" />
 </template>

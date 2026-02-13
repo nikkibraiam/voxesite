@@ -1,5 +1,5 @@
 import { readFile } from 'fs/promises'
-import { join } from 'path'
+import { join, resolve } from 'path'
 import type { Page } from '@cms/contracts'
 import { generateBlockCss } from '@cms/utils'
 
@@ -20,7 +20,8 @@ function generateCSS(page: Page): string {
 
 export default defineEventHandler(async (event) => {
   const slug = event.context.params?.slug
-  const filePath = join(process.cwd(), '../../data/pages', `${slug}.json`)
+  const dir = resolve(process.cwd(), 'public/data/pages')
+  const filePath = join(process.cwd(), dir, `${slug}.json`)
 
   try {
     const raw = await readFile(filePath, 'utf-8')
