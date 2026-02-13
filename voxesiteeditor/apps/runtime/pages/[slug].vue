@@ -17,18 +17,24 @@ const { data } = await useAsyncData<Page>(
 
 page.value = data.value ?? null
 
-watch(page, (p) => {
-  if (!p) return
+const styleVersion = ref(Date.now())
 
-  useHead({
-    link: [
-      {
-        id: 'cms-page-styles',
-        rel: 'stylesheet',
-        href: `/api/pages/${slug}/style?t=${Date.now()}`
-      }
-    ]
-  })
+watch(page, () => {
+  styleVersion.value = Date.now()
+})
+
+useHead({
+  link: [
+    {
+      key: 'cms-page-styles',
+      rel: 'stylesheet',
+      href: computed(() =>
+        page.value
+          ? `/api/pages/${slug}/style?t=${styleVersion.value}`
+          : ''
+      )
+    }
+  ]
 })
 
 function onBlockSelect(blockId: string) {
