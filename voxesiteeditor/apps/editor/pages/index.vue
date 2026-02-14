@@ -44,7 +44,7 @@ async function applyBlockChanges(updated: BaseBlock<string, any>) {
     body: toRaw(page.value)
   })
 
-  // 🔥 avisamos al runtime que recargue estilos
+  // avisamos al runtime que recargue estilos
   previewFrame.value?.contentWindow?.postMessage(
     { type: 'PAGE_SAVED' },
     'http://localhost:3001'
@@ -72,9 +72,8 @@ async function publishSite(siteId: string){
     return
   }
 
-  await $fetch('http://localhost:2999/api/build', {
-    method: 'POST',
-    body: { siteId }
+  await $fetch(`http://localhost:2999/api/${siteId}/build`, {
+    method: 'POST'
   })
   alert(`Sitio publicado: ${siteId}`)
 }
