@@ -1,3 +1,5 @@
 **/node_modules
 **/pnpm-lock.yaml
 **/dist/**
+**/public_builds/**
+**/runtime_storage/**

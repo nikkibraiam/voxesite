@@ -3,6 +3,7 @@ import { ref, onMounted, watch } from 'vue'
 import type { Page } from '@cms/contracts'
 import { renderBlock } from '@cms/ui'
 import { SelectableBlock } from '@cms/ui/wrappers'
+import { generateBlockCss } from '@cms/utils'
 
 const route = useRoute()
 const slug = route.params.slug as string
@@ -11,11 +12,32 @@ const { data, error } : any = await useFetch(
   `http://localhost:2999/api/demosite/page/${slug}`
 )
 
-const page = ref<Page | null>(null)
+const page = ref<Page | null>(data.value?.data)
   
 const isEditor = process.client && window !== window.parent
 
+const dynamicStyleTag = ref<HTMLStyleElement | null>(null)
 
+function generatePageCss(page: Page) {
+  let css = ''
+
+  for (const block of page.blocks) {
+    css += generateBlockCss(block)
+  }
+
+  return css
+}
+
+function regenerateStyles(page: Page) {
+  const css = generatePageCss(page)
+
+  if (!dynamicStyleTag.value) {
+    dynamicStyleTag.value = document.createElement('style')
+    document.head.appendChild(dynamicStyleTag.value)
+  }
+
+  dynamicStyleTag.value.innerHTML = css
+}
 
 const styleVersion = ref(Date.now())
 
@@ -52,12 +74,14 @@ onMounted(() => {
     if (event.origin !== 'http://localhost:3000') return
 
     if (event.data?.type === 'PAGE_SAVED') {
+      page.value = event.data.page
+      regenerateStyles(event.data.page)
       styleVersion.value = Date.now()
       return
     }
-
-    // preview en vivo (cuando cambia page sin guardar)
-    page.value = event.data as Page
+    if (event.data?.type == 'ADD_BLOCK'){
+      page.value = event.data.page
+    }
   })
 })
 </script>

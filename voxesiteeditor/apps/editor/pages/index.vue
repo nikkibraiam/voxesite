@@ -13,7 +13,6 @@ const page = ref<Page>({
   blocks: []
 })
 
-
 function addHero() {
   page.value.blocks.push({
     id: crypto.randomUUID(),
@@ -46,7 +45,7 @@ async function applyBlockChanges(updated: BaseBlock<string, any>) {
 
   // avisamos al runtime que recargue estilos
   previewFrame.value?.contentWindow?.postMessage(
-    { type: 'PAGE_SAVED' },
+    { type: 'PAGE_SAVED', page: structuredClone(toRaw(page.value)) },
     'http://localhost:3001'
   )
 }
@@ -59,14 +58,14 @@ async function savePage() {
 
   // 🔥 avisamos al runtime que recargue estilos
   previewFrame.value?.contentWindow?.postMessage(
-    { type: 'PAGE_SAVED' },
+    { type: 'PAGE_SAVED', page: structuredClone(toRaw(page.value)) },
     'http://localhost:3001'
   )
 
   alert('Página guardada 🚀')
 }
 
-async function publishSite(siteId: string){
+async function publishSite(siteId: string) {
   if (!siteId) {
     alert('No hay siteId definido')
     return
@@ -80,7 +79,7 @@ async function publishSite(siteId: string){
 
 
 onMounted(() => {
-  window.addEventListener('message', (event) => { 
+  window.addEventListener('message', (event) => {
     if (event.data?.type === 'BLOCK_SELECT') {
       selectedBlockId.value = event.data.blockId
     }
@@ -91,7 +90,7 @@ watch(
   page,
   (newPage) => {
     previewFrame.value?.contentWindow?.postMessage(
-      structuredClone(toRaw(newPage)),
+      { type: 'ADD_BLOCK', page: structuredClone(toRaw(newPage)) },
       'http://localhost:3001'
     )
   },
