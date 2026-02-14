@@ -2,11 +2,24 @@ import express from 'express'
 import cors from 'cors'
 import { saveSite } from './saveSite'
 import { buildSite } from './buildSite'
+import { readSite } from './readSite'
 
 const app = express()
 
 app.use(cors())
 app.use(express.json())
+
+// 🔹 READ
+app.get('/api/:siteId/page/:slug', async (req, res) => {
+  const { siteId, slug } = req.params
+
+  try {
+    const result = await readSite(siteId, slug)
+    res.json(result)
+  } catch (error) {
+    res.status(500).json({ ok: false, error })
+  }
+})
 
 // 🔹 SAVE
 app.post('/api/:siteId/save', async (req, res) => {

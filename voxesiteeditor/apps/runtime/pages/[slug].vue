@@ -7,14 +7,12 @@ import { SelectableBlock } from '@cms/ui/wrappers'
 const route = useRoute()
 const slug = route.params.slug as string
 
-const pages = import.meta.glob('/public/data/pages/*.json', {
-  eager: true,
-  import: 'default'
-})
-
-const page = ref<Page | null>(
-  pages[`/public/data/pages/${slug}.json`] as Page || null
+const { data, error } : any = await useFetch(
+  `http://localhost:2999/api/miSitio/page/${slug}`
 )
+
+const page : any = computed(() => data.value?.data || null)
+  
 const isEditor = process.client && window !== window.parent
 
 

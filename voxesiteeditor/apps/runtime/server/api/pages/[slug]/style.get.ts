@@ -1,5 +1,3 @@
-import { readFile } from 'fs/promises'
-import { join, resolve } from 'path'
 import type { Page } from '@cms/contracts'
 import { generateBlockCss } from '@cms/utils'
 
@@ -14,25 +12,32 @@ function generatePageCss(page: Page) {
 }
 
 function generateCSS(page: Page): string {
-  const css = generatePageCss(page)
-  return css
+  return generatePageCss(page)
 }
 
 export default defineEventHandler(async (event) => {
   const slug = event.context.params?.slug
-  const dir = resolve(process.cwd(), 'public/data/pages')
-
-  const filePath = join(dir, `${slug}.json`)
+  const siteId = 'miSitio' // luego lo haces dinámico
 
   try {
-    const raw = await readFile(filePath, 'utf-8')
-    const page: Page = JSON.parse(raw)
+    const response = await fetch(
+      `http://localhost:2999/api/${siteId}/page/${slug}`
+    )
+
+    if (!response.ok) {
+      throw new Error('Página no encontrada')
+    }
+
+    const result = await response.json()
+    const page: Page = result.data
 
     setHeader(event, 'Content-Type', 'text/css')
     setHeader(event, 'Cache-Control', 'no-store')
 
     return generateCSS(page)
-  } catch {
+
+  } catch (error) {
+    console.error(error)
     return ''
   }
 })
