@@ -16,10 +16,22 @@ app.get('/api/:siteId/page/:slug', async (req, res) => {
   try {
     const result = await readSite(siteId, slug)
     res.json(result)
-  } catch (error) {
-    res.status(500).json({ ok: false, error })
+  } catch (error: any) {
+    if (error.message === 'Página no encontrada') {
+      return res.status(404).json({
+        ok: false,
+        message: 'Página no encontrada'
+      })
+    }
+
+    console.error(error)
+    return res.status(500).json({
+      ok: false,
+      message: 'Error interno del servidor'
+    })
   }
 })
+
 
 // 🔹 SAVE
 app.post('/api/:siteId/save', async (req, res) => {

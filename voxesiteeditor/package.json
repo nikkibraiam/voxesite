@@ -8,7 +8,7 @@
     "dev:editor": "pnpm -F @cms/editor dev",
     "dev:runtime": "pnpm -F @cms/runtime dev",
     "dev:server": "pnpm -F node-build-server dev",
-    "dev": "pnpm -r --parallel dev:editor dev:runtime dev:server"
+    "dev": "pnpm -r --parallel dev"
   },
   "keywords": [],
   "author": "",

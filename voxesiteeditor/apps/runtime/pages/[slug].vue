@@ -8,10 +8,10 @@ const route = useRoute()
 const slug = route.params.slug as string
 
 const { data, error } : any = await useFetch(
-  `http://localhost:2999/api/miSitio/page/${slug}`
+  `http://localhost:2999/api/demosite/page/${slug}`
 )
 
-const page : any = computed(() => data.value?.data || null)
+const page = ref<Page | null>(null)
   
 const isEditor = process.client && window !== window.parent
 

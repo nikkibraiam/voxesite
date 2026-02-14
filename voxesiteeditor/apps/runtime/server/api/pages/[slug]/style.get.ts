@@ -17,7 +17,7 @@ function generateCSS(page: Page): string {
 
 export default defineEventHandler(async (event) => {
   const slug = event.context.params?.slug
-  const siteId = 'miSitio' // luego lo haces dinámico
+  const siteId = 'demosite' // luego lo haces dinámico
 
   try {
     const response = await fetch(
@@ -25,7 +25,8 @@ export default defineEventHandler(async (event) => {
     )
 
     if (!response.ok) {
-      throw new Error('Página no encontrada')
+      // throw new Error('Página no encontrada')
+      return ''
     }
 
     const result = await response.json()

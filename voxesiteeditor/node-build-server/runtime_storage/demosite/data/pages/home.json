@@ -3,17 +3,17 @@
   "slug": "home",
   "blocks": [
     {
-      "id": "3f8bebf5-e16b-45cc-b45d-74d81af0fb4b",
+      "id": "bbf6def7-83dc-40ac-a1c2-bb86d3832f3c",
       "type": "Hero",
       "props": {
-        "title": "Hero desde edit",
-        "subtitle": "sdasd"
+        "title": "Hero desde edit"
       },
       "styles": {
         ".text, .hero__title, .hero__subtitle": {
-          "color": "#ff0505"
+          "color": "#ee3f3f"
         }
       }
     }
-  ]
+  ],
+  "cssFile": "/generated-css/home.css"
 }
