@@ -3,14 +3,14 @@
   "slug": "home",
   "blocks": [
     {
-      "id": "c4220ac0-d482-4f17-a69b-aace70ed79c9",
+      "id": "aa0e520c-3385-4738-a67e-0efacfbd6437",
       "type": "Hero",
       "props": {
-        "title": "Braiam Esneider Patino Machinesoft"
+        "title": "Braiam Test new"
       },
       "styles": {
         ".text, .hero__title, .hero__subtitle": {
-          "color": "#00f53d"
+          "color": "#ff8800"
         }
       }
     }
