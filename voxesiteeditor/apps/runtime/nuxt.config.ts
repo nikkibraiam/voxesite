@@ -2,7 +2,8 @@ import { readdirSync } from 'fs'
 import { resolve } from 'path'
 
 const siteId = process.env.SITE_ID || 'default'
-const pagesDir = resolve(__dirname, 'public/data/pages')
+// Carpeta aislada por siteId para evitar contaminación entre builds concurrentes
+const pagesDir = resolve(__dirname, `public/_builds/${siteId}/data/pages`)
 
 let routes: string[] = []
 
