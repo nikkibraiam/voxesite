@@ -3,14 +3,14 @@
   "slug": "home",
   "blocks": [
     {
-      "id": "c0eda7c0-595c-4b1c-95a9-5c3981f03b83",
+      "id": "c51fa0ae-9aad-40d4-b010-fc4eac9da1b6",
       "type": "Hero",
       "props": {
-        "title": "Hero desde editor BR"
+        "title": "Braiam P"
       },
       "styles": {
         ".text, .hero__title, .hero__subtitle": {
-          "color": "#a30000"
+          "color": "#5900ff"
         }
       }
     }

@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { HeroBlock } from '@cms/contracts'
+import type { HeroProps } from '@cms/contracts'
 import { computed } from 'vue';
 
-const props = defineProps<HeroBlock['props']>()
+const props = defineProps<HeroProps>()
 const baseClass = 'hero__content'
 const classes = computed(() => [
   baseClass,
