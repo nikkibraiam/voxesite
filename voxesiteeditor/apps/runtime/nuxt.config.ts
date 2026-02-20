@@ -15,7 +15,7 @@ try {
 }
 
 export default defineNuxtConfig({
-  ssr: false, // renderizado estático (SSG)
+  ssr: true,
   nitro: {
     output: {
       publicDir: `public_builds/${siteId}`, // build aislado por siteId

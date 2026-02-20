@@ -1,0 +1,19 @@
+{
+  "id": "2a8dda0d-be2d-4e13-b6f8-effaf1058def",
+  "slug": "home",
+  "blocks": [
+    {
+      "id": "c0eda7c0-595c-4b1c-95a9-5c3981f03b83",
+      "type": "Hero",
+      "props": {
+        "title": "Hero desde editor BR"
+      },
+      "styles": {
+        ".text, .hero__title, .hero__subtitle": {
+          "color": "#a30000"
+        }
+      }
+    }
+  ],
+  "cssFile": "/generated-css/home.css"
+}
