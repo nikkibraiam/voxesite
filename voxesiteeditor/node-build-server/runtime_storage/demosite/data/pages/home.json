@@ -37,7 +37,7 @@
       },
       "styles": {
         ".text, .hero__title, .hero__subtitle": {
-          "color": "#da24ff"
+          "color": "#04ff00"
         },
         ".text": {
           "font-size": "23"

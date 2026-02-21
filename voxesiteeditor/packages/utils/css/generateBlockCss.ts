@@ -1,14 +1,5 @@
 import { BaseBlock } from "../../contracts"
 
-const ALLOWED_PROPERTIES = [
-  'padding',
-  'margin',
-  'font-size',
-  'color',
-  'background',
-  'line-height',
-  'text-align'
-]
 
 export function generateBlockCss(block: BaseBlock<string, any>) {
   if (!block.styles) return ''
@@ -19,7 +10,12 @@ export function generateBlockCss(block: BaseBlock<string, any>) {
   for (const selector in block.styles) {
     const scopedSelectors = selector
       .split(',')
-      .map(s => `${scope} ${s.trim()}`)
+      .map(s => {
+        const trimmed = s.trim()
+        // Repetir el scope sube la especificidad a (0,2,0) o (0,3,0)
+        // para ganar contra el scoped CSS de los componentes (0,2,0)
+        return trimmed ? `${scope}${scope} ${trimmed}` : `${scope}${scope}`
+      })
       .join(', ')
 
     css += `
