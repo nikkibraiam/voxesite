@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import type { TextBlock } from '@cms/contracts'
+import type { TextProps } from '@cms/contracts'
 import { computed } from 'vue';
 
-const props = defineProps<TextBlock['props']>()
+const props = defineProps<TextProps>()
 const baseClass = 'text-block'
 
 const classes = computed(() => [

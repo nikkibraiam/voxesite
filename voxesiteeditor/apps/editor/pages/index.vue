@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, toRaw, onMounted, computed } from 'vue'
 import type { Page, BaseBlock } from '@cms/contracts'
+import { BlockSchemas } from '@cms/ui/schemas'
 import BlockEditorModal from '../modals/BlockEditorModal.vue'
 
 
@@ -13,19 +14,12 @@ const page = ref<Page>({
   blocks: []
 })
 
-function addHero() {
+function addBlock(type: string) {
+  const schema = BlockSchemas[type]
   page.value.blocks.push({
     id: crypto.randomUUID(),
-    type: 'Hero',
-    props: { title: 'Hero desde editor' }
-  })
-}
-
-function addText() {
-  page.value.blocks.push({
-    id: crypto.randomUUID(),
-    type: 'TextBlock',
-    props: { text: 'Texto desde editor' }
+    type,
+    props: { ...schema.content.defaultProps }
   })
 }
 
@@ -78,7 +72,16 @@ async function publishSite(siteId: string) {
 }
 
 
-onMounted(() => {
+onMounted(async () => {
+  try {
+    const result: any = await $fetch('/api/page')
+    if (result?.data) {
+      page.value = result.data
+    }
+  } catch {
+    // página aún no existe en el servidor, se usa la default vacía
+  }
+
   window.addEventListener('message', (event) => {
     if (event.data?.type === 'BLOCK_SELECT') {
       selectedBlockId.value = event.data.blockId
@@ -103,8 +106,11 @@ const selectedBlock = computed<BaseBlock<string, any> | null>(() => {
 </script>
 
 <template>
-  <button @click="addHero">Hero</button>
-  <button @click="addText">Text</button>
+  <button
+    v-for="[type, schema] in Object.entries(BlockSchemas)"
+    :key="type"
+    @click="addBlock(type)"
+  >{{ schema.content.label }}</button>
 
   <iframe ref="previewFrame" src="http://localhost:3001" width="100%" height="400" />
   <button @click="savePage">Guardar página</button>

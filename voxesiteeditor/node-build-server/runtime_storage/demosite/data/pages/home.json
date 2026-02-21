@@ -6,11 +6,41 @@
       "id": "aa0e520c-3385-4738-a67e-0efacfbd6437",
       "type": "Hero",
       "props": {
-        "title": "Braiam Test new"
+        "title": "Braiam Test news"
       },
       "styles": {
         ".text, .hero__title, .hero__subtitle": {
-          "color": "#ff8800"
+          "color": "#c83c3c"
+        }
+      }
+    },
+    {
+      "id": "173ae8d5-54cb-419a-a583-d0a835dc7862",
+      "type": "Hero",
+      "props": {
+        "title": "Hero desde edi br"
+      },
+      "styles": {
+        ".text, .hero__title, .hero__subtitle": {
+          "color": "#ff5c5c"
+        },
+        "": {
+          "background-color": "#431414"
+        }
+      }
+    },
+    {
+      "id": "f99b3fb3-4b84-429e-b18a-043099cfb759",
+      "type": "TextBlock",
+      "props": {
+        "text": "Texto desde editor"
+      },
+      "styles": {
+        ".text, .hero__title, .hero__subtitle": {
+          "color": "#da24ff"
+        },
+        ".text": {
+          "font-size": "23"
         }
       }
     }

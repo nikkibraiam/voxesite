@@ -14,7 +14,7 @@ const { data, error } : any = await useFetch(
 
 const page = ref<Page | null>(data.value?.data)
   
-const isEditor = process.client && window !== window.parent
+const isEditor = ref(false)
 
 const dynamicStyleTag = ref<HTMLStyleElement | null>(null)
 
@@ -68,7 +68,9 @@ function onBlockSelect(blockId: string) {
 }
 
 onMounted(() => {
-  if (!isEditor) return
+  isEditor.value = window !== window.parent
+
+  if (!isEditor.value) return
 
   window.addEventListener('message', (event) => {
     if (event.origin !== 'http://localhost:3000') return
