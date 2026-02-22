@@ -7,6 +7,11 @@ export const TextBlockSchema = {
       key: 'text',
       label: 'Texto',
       type: 'string'
+    },
+    {
+      key: 'customCss',
+      label: 'CSS Custom',
+      type: 'css'
     }
   ]
 }

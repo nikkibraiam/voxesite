@@ -2,7 +2,7 @@ import { BaseBlock } from "../../contracts"
 
 
 export function generateBlockCss(block: BaseBlock<string, any>) {
-  if (!block.styles) return ''
+  if (!block.styles && !block.customCss) return ''
 
   let css = ''
   const scope = `.block-${block.id}`
@@ -25,6 +25,10 @@ ${Object.entries(block.styles[selector])
   .join('\n')}
 }
 `
+  }
+
+  if (block.customCss?.trim()) {
+    css += `\n${block.customCss.trim()}\n`
   }
 
   return css

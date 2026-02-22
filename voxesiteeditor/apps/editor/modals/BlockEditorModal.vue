@@ -68,8 +68,16 @@ function applyChanges() {
       :key="field.key"
     >
       <label>{{ field.label }}</label>
+      <textarea
+        v-if="field.type === 'css'"
+        v-model="(draft as Record<string, any>)[field.key]"
+        @input="applyChanges"
+        placeholder="color: red; font-size: 14px;"
+      />
       <input
-        v-model="draft.props[field.key]" @input="applyChanges"
+        v-else
+        v-model="draft.props[field.key]"
+        @input="applyChanges"
       />
     </div>
 

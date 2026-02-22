@@ -7,7 +7,11 @@ export type BlockStyles = {
   }
 }
 
-export type BaseBlock<TType extends string, TProps> = {
+export interface IBlockBase {
+  customCss?: string
+}
+
+export type BaseBlock<TType extends string, TProps> = IBlockBase & {
   id: string
   type: TType
   props: TProps
