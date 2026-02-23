@@ -18,3 +18,13 @@
 .block-f99b3fb3-4b84-429e-b18a-043099cfb759.block-f99b3fb3-4b84-429e-b18a-043099cfb759 .text {
   font-size: 23;
 }
+
+.block-6417b3bd-00b9-4978-9170-8746d3f50077.block-6417b3bd-00b9-4978-9170-8746d3f50077 .text, .block-6417b3bd-00b9-4978-9170-8746d3f50077.block-6417b3bd-00b9-4978-9170-8746d3f50077 .hero__title, .block-6417b3bd-00b9-4978-9170-8746d3f50077.block-6417b3bd-00b9-4978-9170-8746d3f50077 .hero__subtitle {
+  color: #d48c8c;
+}
+
+.hero__subtitle{
+background-color:green!important;
+font-size:23px;
+color: red;
+}

@@ -43,6 +43,19 @@
           "font-size": "23"
         }
       }
+    },
+    {
+      "id": "6417b3bd-00b9-4978-9170-8746d3f50077",
+      "type": "Hero",
+      "props": {
+        "title": "Hero desde editor"
+      },
+      "customCss": ".hero__subtitle{\nbackground-color:green!important;\nfont-size:23px;\ncolor: red;\n}",
+      "styles": {
+        ".text, .hero__title, .hero__subtitle": {
+          "color": "#d48c8c"
+        }
+      }
     }
   ],
   "cssFile": "/generated-css/home.css"
