@@ -1,5 +1,7 @@
 <script setup lang="ts">
+import { VueDraggable } from 'vue-draggable-plus'
 import { BlockSchemas } from '@cms/ui/schemas'
+import SelectableBlock from '@cms/ui/wrappers/SelectableBlock.vue'
 import BlockEditorModal from '../modals/BlockEditorModal.vue'
 import { usePageStore } from '../stores/usePageStore'
 import { usePageEditor } from '../composables/usePageEditor'
@@ -17,7 +19,7 @@ const {
   addOrSelectHeader,
   addOrSelectFooter
 } = useLayoutEditor()
-useDragDrop()
+const { draggableBlocks, sortableOptions } = useDragDrop()
 
 function addNewPage() {
   store.addPage({
@@ -94,7 +96,7 @@ function addNewPage() {
     </div>
   </template>
 
-  <!-- Page mode: block add buttons + undo/redo -->
+  <!-- Page mode: block add buttons + undo/redo + draggable block list -->
   <template v-else>
     <button
       v-for="[type, schema] in Object.entries(BlockSchemas)"
@@ -105,6 +107,29 @@ function addNewPage() {
 
     <button :disabled="!store.canUndo" @click="store.undo()">Deshacer</button>
     <button :disabled="!store.canRedo" @click="store.redo()">Rehacer</button>
+
+    <!-- Draggable block list — drag handle in each SelectableBlock allows reordering.
+         usePageEditor deep-watches store.site and fires PAGE_UPDATE to the iframe
+         automatically after every reorder, so no manual postMessage is needed here. -->
+    <VueDraggable
+      v-model="draggableBlocks"
+      v-bind="sortableOptions"
+      class="block-list"
+    >
+      <div
+        v-for="block in draggableBlocks"
+        :key="block.id"
+        class="block-list__item"
+      >
+        <SelectableBlock
+          :blockId="block.id"
+          :enabled="true"
+          @select="store.selectBlock"
+        >
+          <span class="block-list__label">{{ block.type }}</span>
+        </SelectableBlock>
+      </div>
+    </VueDraggable>
   </template>
 
   <!--
@@ -125,3 +150,42 @@ function addNewPage() {
   <!-- Modal reads selectedBlock / selectedLayoutBlock from the store directly -->
   <BlockEditorModal />
 </template>
+
+<style>
+/* ── Global drag styles (unscoped — SortableJS adds these classes to the DOM) ── */
+
+.drag-ghost {
+  opacity: 0.4;
+  background: #c8ebfb;
+  border: 2px dashed #4a90d9;
+}
+
+.drag-chosen {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+}
+</style>
+
+<style scoped>
+.block-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.block-list__item {
+  /* Ensure position:relative context is maintained for the absolute drag handle */
+  position: relative;
+}
+
+.block-list__label {
+  display: block;
+  padding: 8px 8px 8px 52px; /* 52px left clears the drag handle */
+  font-size: 13px;
+  font-weight: 500;
+  background: #f5f5f5;
+  border-radius: 4px;
+  border: 1px solid #e0e0e0;
+  user-select: none;
+}
+</style>

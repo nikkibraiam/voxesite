@@ -32,14 +32,14 @@ voxesiteeditor/
 | `packages/ui/schemas/layout/` | ✅ Layout block schemas: `header.schema.ts`, `footer.schema.ts` |
 | `packages/ui/components/LayoutHeader.vue` | ✅ Responsive header — logo, nav links, mobile hamburger menu |
 | `packages/ui/components/LayoutFooter.vue` | ✅ Responsive footer — column groups, copyright, auto text-contrast |
-| `packages/ui/wrappers/SelectableBlock.vue` | Click selection wrapper for blocks |
+| `packages/ui/wrappers/SelectableBlock.vue` | ✅ Click selection wrapper + drag handle (6-dot SVG, 44×44 px touch target, `touch-action:none`) |
 | `packages/utils/css/generateBlockCss.ts` | Generates scoped CSS from block styles |
 | `apps/editor/stores/usePageStore.ts` | ✅ Pinia store — page state + layout state + dual undo/redo stacks |
 | `apps/editor/composables/usePageEditor.ts` | ✅ Load/save full Site, semver publish, iframe sync (page + layout), message listener |
 | `apps/editor/composables/useLayoutEditor.ts` | ✅ Layout tab mode — `isLayoutMode`, `activateLayoutMode`, `activatePage`, `addOrSelectHeader/Footer` |
 | `apps/editor/composables/useBlockSelection.ts` | ✅ Block selection wrapper |
-| `apps/editor/composables/useDragDrop.ts` | ✅ Placeholder — ready for Vue Draggable Plus |
-| `apps/editor/pages/index.vue` | ✅ Thin component — Layout tab + page tabs + `+ Página` button + iframe |
+| `apps/editor/composables/useDragDrop.ts` | ✅ Drag & drop — `draggableBlocks` computed (get/set), `sortableOptions` for vue-draggable-plus |
+| `apps/editor/pages/index.vue` | ✅ Thin component — Layout tab + page tabs + `+ Página` button + draggable block list + iframe |
 | `apps/editor/server/api/site.get.ts` | ✅ `GET /api/site` — proxies to build server, triggers migration on first load |
 | `apps/editor/server/api/save.post.ts` | ✅ `POST /api/save` — accepts full `Site`, generates per-page CSS |
 | `apps/editor/modals/BlockEditorModal.vue` | ✅ Block/layout property editor — handles both page blocks and layout blocks |
@@ -170,6 +170,7 @@ type EditorMessage =
 - `addBlock(type)` — appends block with schema defaults, snapshots
 - `updateBlock(block, { snapshot })` — `snapshot: false` for live preview, `snapshot: true` for intentional commits
 - `removeBlock(id)` — removes block, snapshots
+- `reorderBlocks(fromIndex, toIndex)` — moves one block atomically (snapshot before splice); clears `selectedBlockId`
 - `selectBlock(id | null)` — sets selected page block; clears `selectedLayoutBlockId`
 - `undo()` / `redo()` — restore/replay `currentPage` snapshots via `_replacePage()`
 - `setPage(page)` — backward-compat; updates current page or bootstraps minimal site
@@ -202,7 +203,7 @@ type EditorMessage =
 - [x] Pinia store (`usePageStore`) with undo/redo (50-entry history)
 - [x] `BlockEditorModal` reads/writes through store
 - [x] Undo/Redo buttons in editor UI
-- [x] Composables: `usePageEditor`, `useBlockSelection`, `useDragDrop` (placeholder)
+- [x] Composables: `usePageEditor`, `useBlockSelection`, `useDragDrop`
 - [x] `index.vue` reduced to thin component — zero business logic
 - [x] **Full Site model** — `Site`, `SiteLayout`, `SiteVersion`, `LayoutBlock`, `GridDefinition` types in `packages/contracts/page.ts`
 - [x] **Multi-page store** — `usePageStore` root state is `site` + `currentPageId`; `page` is a backward-compat computed alias; block actions operate on `currentPage`
@@ -225,6 +226,7 @@ type EditorMessage =
 - [x] **LAYOUT_BLOCK_SELECT message** — runtime sends slot name when header/footer clicked; `usePageEditor` routes to `store.selectLayoutBlock(slot)`
 - [x] **Runtime layout rendering** — `[slug].vue` fetches full site (`GET /api/demosite/site`), renders `LayoutHeader` above and `LayoutFooter` below page blocks; layout blocks are `SelectableBlock`-wrapped in editor mode
 - [x] **BlockEditorModal extended** — handles both page blocks and layout blocks; `draftContext` tracks which; dispatches to correct store action; supports `'boolean'`, `'color'`, and `'json'` field types in addition to `'string'` and `'css'`
+- [x] **Drag & Drop block reordering** — `vue-draggable-plus` (SortableJS) in editor block list panel; `reorderBlocks(fromIndex, toIndex)` store action creates undo snapshot before splice; `useDragDrop` composable provides `draggableBlocks` computed (get/set) + `sortableOptions`; `SelectableBlock` extended with 44×44 px drag handle (`touch-action:none` for WebView); `PAGE_UPDATE` fires automatically via existing `usePageEditor` deep-watch after every reorder
 
 ---
 
@@ -237,12 +239,15 @@ All sub-tasks done. `Site` model implemented, multi-page store, page tabs, site-
 All sub-tasks done. `LayoutHeader` + `LayoutFooter` block types, schemas, components, renderer integration, store actions with undo/redo, Layout tab in editor, live LAYOUT_UPDATE preview, LAYOUT_BLOCK_SELECT click-to-edit from runtime.
 - Pending: **Grid system** (`SiteLayout.grids[]`) — type placeholder exists, UI and renderer integration not yet built
 
-### 3. Drag & Drop Editor
-- Use `Vue Draggable Plus` (wraps SortableJS)
-- Complete `useDragDrop()` composable (placeholder already exists)
-- Extend `SelectableBlock.vue` with drag handle
-- Reorder commits atomically through `usePageStore`
-- Must work inside WebView on mobile — use touch-friendly drag events (not just mouse events)
+### 3. ✅ Drag & Drop Editor — COMPLETE
+- `vue-draggable-plus` (SortableJS) installed in `apps/editor`
+- `useDragDrop()` composable: `draggableBlocks` computed (get/set), `sortableOptions` (`handle`, `delay: 150`, `delayOnTouchOnly: true`, `ghostClass`, `chosenClass`)
+- `reorderBlocks(fromIndex, toIndex)` in `usePageStore`: snapshots, splices, calls `_replacePage()`
+- `SelectableBlock.vue` extended: absolute drag handle, 6-dot SVG grip, 44×44 px, `touch-action:none`, visible on hover (desktop) / always visible (`pointer:coarse` media query)
+- `index.vue` page-mode section: `<VueDraggable v-model="draggableBlocks">` wraps the block list; each `SelectableBlock` item wires `@select → store.selectBlock`
+- Global CSS: `.drag-ghost` (dashed blue), `.drag-chosen` (box-shadow) in unscoped `<style>` in `index.vue`
+- Reorder triggers `PAGE_UPDATE` automatically via existing `usePageEditor` deep-watch — no extra postMessage code needed
+- Pending: drag & drop within the **iframe** preview (runtime-side) — currently only the editor panel list is draggable
 
 ### 4. Professional Block Editor UI
 - Current: modal opens on block click — works but may not scale well to mobile

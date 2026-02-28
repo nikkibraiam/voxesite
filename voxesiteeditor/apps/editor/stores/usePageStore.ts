@@ -232,6 +232,22 @@ export const usePageStore = defineStore('page', () => {
   }
 
   /**
+   * Move a block from one index to another within the current page.
+   * Snapshots before mutating so Ctrl+Z works after a drag.
+   * Deselects any selected block (nothing should stay selected mid-drag).
+   */
+  function reorderBlocks(fromIndex: number, toIndex: number) {
+    if (!currentPage.value || !site.value) return
+    if (fromIndex === toIndex) return
+    _snapshot()
+    const updatedPage: Page = structuredClone(toRaw(currentPage.value))
+    const [moved] = updatedPage.blocks.splice(fromIndex, 1)
+    updatedPage.blocks.splice(toIndex, 0, moved!)
+    selectedBlockId.value = null
+    _replacePage(updatedPage)
+  }
+
+  /**
    * Remove a block by id from the current page.
    * Deselects the block if it was selected.
    */
@@ -434,6 +450,7 @@ export const usePageStore = defineStore('page', () => {
     addBlock,
     updateBlock,
     removeBlock,
+    reorderBlocks,
     selectBlock,
     // layout block selection
     selectLayoutBlock,
