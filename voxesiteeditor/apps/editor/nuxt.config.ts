@@ -1,4 +1,5 @@
 export default defineNuxtConfig({
+  modules: ['@pinia/nuxt'],
   build: {
     transpile: ["@cms/ui", "@cms/contracts", "@cms/utils"],
   },
