@@ -1,110 +1,207 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
-import type { Page, BaseBlock } from '@cms/contracts'
+import { ref, computed, toRaw } from 'vue'
+import type { Page, Site, BaseBlock } from '@cms/contracts'
 import { BlockSchemas } from '@cms/ui/schemas'
 
 const MAX_HISTORY = 50
 
 export const usePageStore = defineStore('page', () => {
-  // ─── State ─────────────────────────────────────────────────────────────────
+  // ─── Primary state ──────────────────────────────────────────────────────────
 
-  const page = ref<Page | null>(null)
+  /** The full site document — root of all mutable state. */
+  const site = ref<Site | null>(null)
+
+  /** ID of the page currently open in the editor canvas. */
+  const currentPageId = ref<string | null>(null)
+
+  /** Currently selected block (opens BlockEditorModal). */
   const selectedBlockId = ref<string | null>(null)
 
   /**
-   * Undo stack: each entry is a full Page snapshot taken before a mutation.
-   * Oldest entries are evicted when the cap is reached.
+   * Undo stack — stores Page snapshots for the *current* page only.
+   * Cleared when the user switches to a different page via setCurrentPage().
    */
   const history = ref<Page[]>([])
 
   /**
-   * Redo stack: populated when the user undoes an action.
-   * Any new mutation clears this stack.
+   * Redo stack — populated when the user undoes.
+   * Cleared on any new block mutation.
    */
   const future = ref<Page[]>([])
 
-  // ─── Getters ───────────────────────────────────────────────────────────────
+  // ─── Computed getters ───────────────────────────────────────────────────────
+
+  /** The page currently open in the editor canvas. */
+  const currentPage = computed<Page | null>(() => {
+    if (!site.value || !currentPageId.value) return null
+    return site.value.pages.find(p => p.id === currentPageId.value) ?? null
+  })
+
+  /**
+   * Backward-compat alias for `currentPage`.
+   * All existing consumers (`BlockEditorModal`, `usePageEditor` watcher, etc.)
+   * read `store.page` — this keeps them working with zero changes.
+   */
+  const page = computed<Page | null>(() => currentPage.value)
 
   const selectedBlock = computed<BaseBlock<string, any> | null>(() => {
-    if (!page.value || !selectedBlockId.value) return null
-    return page.value.blocks.find(b => b.id === selectedBlockId.value) ?? null
+    if (!currentPage.value || !selectedBlockId.value) return null
+    return currentPage.value.blocks.find(b => b.id === selectedBlockId.value) ?? null
   })
 
   const canUndo = computed(() => history.value.length > 0)
   const canRedo = computed(() => future.value.length > 0)
 
-  // ─── Internal helpers ──────────────────────────────────────────────────────
+  // ─── Internal helpers ───────────────────────────────────────────────────────
 
-  /**
-   * Push the current page onto the undo stack before a mutation.
-   * Clears the redo stack so redo is only valid for the linear history.
-   */
+  /** Snapshot the current page before a mutation (for undo). */
   function _snapshot() {
-    if (!page.value) return
-    history.value.push(structuredClone(page.value))
-    if (history.value.length > MAX_HISTORY) {
-      history.value.shift()
-    }
+    if (!currentPage.value) return
+    history.value.push(structuredClone(toRaw(currentPage.value)))
+    if (history.value.length > MAX_HISTORY) history.value.shift()
     future.value = []
   }
 
-  // ─── Actions ───────────────────────────────────────────────────────────────
+  /**
+   * Replace the matching page in site.pages by id.
+   * All block mutations funnel through this to keep site.value reactive.
+   */
+  function _replacePage(updated: Page) {
+    if (!site.value) return
+    const idx = site.value.pages.findIndex(p => p.id === updated.id)
+    if (idx !== -1) site.value.pages[idx] = updated
+  }
+
+  // ─── Site-level actions ─────────────────────────────────────────────────────
 
   /**
-   * Replace the entire page (e.g. on initial load from the API).
+   * Load the full site (e.g. on initial mount from the API).
    * Does NOT create a history snapshot — loading is not an undoable action.
+   * Defaults currentPageId to the first page if not yet set.
    */
-  function setPage(newPage: Page) {
-    page.value = newPage
+  function setSite(newSite: Site) {
+    site.value = newSite
+    history.value = []
+    future.value = []
+    selectedBlockId.value = null
+    if (newSite.pages.length > 0) {
+      currentPageId.value = newSite.pages[0]!.id
+    }
   }
 
   /**
-   * Add a new block of the given type to the end of the block list.
+   * Switch the active page in the editor.
+   * Clears history/future because undo is scoped per-page session.
+   * Deselects any currently selected block.
+   */
+  function setCurrentPage(id: string) {
+    if (!site.value) return
+    if (!site.value.pages.some(p => p.id === id)) return // guard: invalid id
+    currentPageId.value = id
+    history.value = []
+    future.value = []
+    selectedBlockId.value = null
+  }
+
+  /**
+   * Add a new page to the site and immediately switch to it.
+   * Page additions are not block-level undoable actions.
+   */
+  function addPage(newPage: Page) {
+    if (!site.value) return
+    site.value.pages.push(newPage)
+    setCurrentPage(newPage.id)
+  }
+
+  /**
+   * Remove a page by id.
+   * Guards: will not remove the last page.
+   * Switches to the previous sibling (or first page) when removing the current page.
+   */
+  function removePage(id: string) {
+    if (!site.value || site.value.pages.length <= 1) return
+    const idx = site.value.pages.findIndex(p => p.id === id)
+    if (idx === -1) return
+    site.value.pages.splice(idx, 1)
+    if (currentPageId.value === id) {
+      // pages still has items (length > 1 guard above), so the index is always valid
+      setCurrentPage(site.value.pages[Math.max(0, idx - 1)]!.id)
+    }
+  }
+
+  // ─── Backward-compat page action ────────────────────────────────────────────
+
+  /**
+   * Replace the current page's data. Kept for backward compatibility.
+   * If no site is loaded yet, bootstraps a minimal site wrapper.
+   * Does NOT create a history snapshot.
+   */
+  function setPage(newPage: Page) {
+    if (!site.value) {
+      site.value = { id: 'demosite', version: '1.0.0', pages: [newPage], layout: {} }
+      currentPageId.value = newPage.id
+    } else {
+      const exists = site.value.pages.some(p => p.id === newPage.id)
+      if (exists) {
+        _replacePage(newPage)
+      } else {
+        site.value.pages.push(newPage)
+      }
+      currentPageId.value = newPage.id
+    }
+  }
+
+  // ─── Block-level actions (operate on currentPage) ──────────────────────────
+
+  /**
+   * Add a new block of the given type to the end of the current page.
    * Uses the schema's defaultProps to pre-fill content.
    */
   function addBlock(type: string) {
-    if (!page.value) return
+    if (!currentPage.value || !site.value) return
     _snapshot()
     const schema = BlockSchemas[type]
-    page.value.blocks.push({
+    const updated: Page = structuredClone(toRaw(currentPage.value))
+    updated.blocks.push({
       id: crypto.randomUUID(),
       type,
       props: { ...schema.content.defaultProps }
     })
+    _replacePage(updated)
   }
 
   /**
-   * Replace a block by its id.
+   * Replace a block by its id within the current page.
    *
-   * @param updated  - The full updated block object.
    * @param options.snapshot - Whether to push a history entry before mutating.
-   *   Pass `false` for live/real-time updates (e.g. every color-picker input
-   *   event) to avoid flooding the history stack. Pass `true` (the default)
-   *   for intentional user actions like clicking "Apply".
+   *   Pass `false` for live/real-time updates (e.g. every color-picker drag)
+   *   to avoid flooding the history stack. Pass `true` (the default) for
+   *   intentional user actions like clicking "Apply".
    */
   function updateBlock(
     updated: BaseBlock<string, any>,
     options: { snapshot?: boolean } = {}
   ) {
-    if (!page.value) return
+    if (!currentPage.value || !site.value) return
     const { snapshot = true } = options
     if (snapshot) _snapshot()
-    const index = page.value.blocks.findIndex(b => b.id === updated.id)
-    if (index !== -1) {
-      page.value.blocks[index] = updated
-    }
+    const updatedPage: Page = structuredClone(toRaw(currentPage.value))
+    const idx = updatedPage.blocks.findIndex(b => b.id === updated.id)
+    if (idx !== -1) updatedPage.blocks[idx] = updated
+    _replacePage(updatedPage)
   }
 
   /**
-   * Remove a block by id. Deselects the block if it was selected.
+   * Remove a block by id from the current page.
+   * Deselects the block if it was selected.
    */
   function removeBlock(id: string) {
-    if (!page.value) return
+    if (!currentPage.value || !site.value) return
     _snapshot()
-    page.value.blocks = page.value.blocks.filter(b => b.id !== id)
-    if (selectedBlockId.value === id) {
-      selectedBlockId.value = null
-    }
+    const updatedPage: Page = structuredClone(toRaw(currentPage.value))
+    updatedPage.blocks = updatedPage.blocks.filter(b => b.id !== id)
+    if (selectedBlockId.value === id) selectedBlockId.value = null
+    _replacePage(updatedPage)
   }
 
   /**
@@ -115,42 +212,50 @@ export const usePageStore = defineStore('page', () => {
     selectedBlockId.value = id
   }
 
-  /**
-   * Restore the previous page state from the undo stack.
-   */
+  // ─── Undo / Redo ───────────────────────────────────────────────────────────
+
+  /** Restore the previous page state from the undo stack. */
   function undo() {
-    if (!canUndo.value || !page.value) return
-    future.value.push(structuredClone(page.value))
-    page.value = history.value.pop()!
+    if (!canUndo.value || !currentPage.value) return
+    future.value.push(structuredClone(toRaw(currentPage.value)))
+    _replacePage(history.value.pop()!)
   }
 
-  /**
-   * Re-apply a previously undone state from the redo stack.
-   */
+  /** Re-apply a previously undone state from the redo stack. */
   function redo() {
-    if (!canRedo.value || !page.value) return
-    history.value.push(structuredClone(page.value))
-    page.value = future.value.pop()!
+    if (!canRedo.value || !currentPage.value) return
+    history.value.push(structuredClone(toRaw(currentPage.value)))
+    _replacePage(future.value.pop()!)
   }
 
-  // ─── Exports ───────────────────────────────────────────────────────────────
+  // ─── Exports ────────────────────────────────────────────────────────────────
 
   return {
     // state
-    page,
+    site,
+    currentPageId,
     selectedBlockId,
     history,
     future,
     // getters
+    currentPage,
+    page,           // backward-compat alias for currentPage
     selectedBlock,
     canUndo,
     canRedo,
-    // actions
+    // site actions
+    setSite,
+    setCurrentPage,
+    addPage,
+    removePage,
+    // backward-compat page action
     setPage,
+    // block actions
     addBlock,
     updateBlock,
     removeBlock,
     selectBlock,
+    // history
     undo,
     redo,
   }
