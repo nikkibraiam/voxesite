@@ -22,33 +22,31 @@ voxesiteeditor/
 ### Key files
 | File | Role |
 |---|---|
-| `packages/contracts/page.ts` | Core types: `Page`, `BaseBlock<TType, TProps>` |
+| `packages/contracts/page.ts` | ✅ Core types: `Page`, `BaseBlock`, `Site`, `SiteLayout`, `SiteVersion`, `LayoutBlock`, `GridDefinition` |
 | `packages/contracts/messages.ts` | ✅ Typed postMessage protocol: `EditorMessage`, `sendEditorMessage`, `isEditorMessage` |
 | `packages/ui/renderer/renderComponent.ts` | Maps JSON blocks → Vue components via `h()` |
 | `packages/ui/schemas/` | Block schemas (drives editor forms dynamically) |
 | `packages/ui/wrappers/SelectableBlock.vue` | Click selection wrapper for blocks |
 | `packages/utils/css/generateBlockCss.ts` | Generates scoped CSS from block styles |
-| `apps/editor/stores/usePageStore.ts` | ✅ Pinia store — central page state |
-| `apps/editor/composables/usePageEditor.ts` | ✅ HTTP side effects: load, save, publish |
-| `apps/editor/composables/useBlockSelection.ts` | ✅ Block selection logic |
+| `apps/editor/stores/usePageStore.ts` | ✅ Pinia store — root state is `site` + `currentPageId`; `page` is a backward-compat computed alias |
+| `apps/editor/composables/usePageEditor.ts` | ✅ Load/save full Site, semver publish, version history, iframe page-switch |
+| `apps/editor/composables/useBlockSelection.ts` | ✅ Block selection wrapper |
 | `apps/editor/composables/useDragDrop.ts` | ✅ Placeholder — ready for Vue Draggable Plus |
-| `apps/editor/pages/index.vue` | ✅ Thin component — only imports and composable calls |
-| `apps/editor/modals/BlockEditorModal.vue` | Block property editor (consumes usePageStore) |
+| `apps/editor/pages/index.vue` | ✅ Thin component — page tabs, `+ Página` button, dynamic iframe src |
+| `apps/editor/server/api/site.get.ts` | ✅ `GET /api/site` — proxies to build server, triggers migration on first load |
+| `apps/editor/server/api/save.post.ts` | ✅ `POST /api/save` — accepts full `Site`, generates per-page CSS |
+| `apps/editor/modals/BlockEditorModal.vue` | Block property editor (consumes usePageStore — unchanged) |
 | `apps/runtime/pages/[slug].vue` | ✅ Renders blocks from JSON, uses typed messages |
+| `node-build-server/src/readSiteFull.ts` | ✅ Read `site.json`; auto-migrates from `data/pages/*.json` on first access |
+| `node-build-server/src/saveSiteFull.ts` | ✅ Write `site.json` + explode per-page files + CSS |
+| `node-build-server/src/versionManager.ts` | ✅ `saveVersion`, `listVersions`, `rollbackVersion` |
+| `node-build-server/src/server.ts` | ✅ Express routes — includes Site CRUD, versions, rollback |
 
 ---
 
-## Data Model
+## Data Model (✅ Implemented)
 
-### Current: Single Page
 ```ts
-interface Page {
-  id: string
-  slug: string
-  blocks: BaseBlock<string, any>[]
-  cssFile?: string
-}
-
 type BaseBlock<TType, TProps> = {
   id: string
   type: TType           // "Hero" | "TextBlock"
@@ -56,40 +54,42 @@ type BaseBlock<TType, TProps> = {
   styles?: BlockStyles  // { ".hero__title": { color: "#fff" } }
   customCss?: string
 }
-```
-
-### Planned: Full Site Model
-The JSON model must evolve from a single page to a versioned site with multiple pages, shared layouts, and global components.
-
-```ts
-interface Site {
-  id: string
-  version: string          // semver — published as a versioned snapshot
-  pages: Page[]            // home, dashboard, welcome, etc.
-  layout: SiteLayout       // shared across all pages
-  publishedAt?: string
-}
-
-interface SiteLayout {
-  header?: LayoutBlock     // global nav/menu
-  footer?: LayoutBlock     // global footer
-  grids?: GridDefinition[] // responsive grid definitions
-}
 
 interface Page {
   id: string
-  slug: string             // e.g. "/" | "/about" | "/dashboard"
-  title: string
+  slug: string          // e.g. "home" | "about"
+  title?: string        // short label for editor tabs (optional, backward-compat)
+  seo?: { title: string; description?: string }
   blocks: BaseBlock<string, any>[]
   cssFile?: string
+}
+
+interface Site {
+  id: string
+  version: string       // semver — bumped on every publish
+  pages: Page[]
+  layout: SiteLayout    // shared layout slots (header/footer/grids)
+  publishedAt?: string  // ISO 8601 — set on publish
+}
+
+interface SiteLayout {
+  header?: LayoutBlock  // global nav/menu (placeholder — implemented in roadmap)
+  footer?: LayoutBlock
+  grids?: GridDefinition[]
+}
+
+interface SiteVersion {
+  version: string       // e.g. "1.2.0"
+  publishedAt: string   // ISO 8601
 }
 ```
 
 **Key decisions:**
-- Publishing = the entire site is versioned and deployed atomically, not page by page
-- Each publish creates a versioned snapshot (e.g. `v1.0.0`, `v1.0.1`) for rollback
-- Layout blocks (header, footer, grids) are separate from page blocks and rendered as wrappers
-- CSS is still scoped per block using `.block-{id}` prefix
+- `Site` is the persistence unit — all saves and publishes operate on the full site
+- Publishing bumps the semver patch, sets `publishedAt`, saves, then triggers Nuxt build
+- Each publish creates a versioned snapshot in `runtime_storage/{siteId}/versions/{version}/site.json`
+- `Page.title` is optional for backward compat — existing JSON without it still parses
+- CSS is scoped per block using `.block-{id}` prefix; generated per page on every save
 
 ---
 
@@ -114,22 +114,36 @@ type EditorMessage =
 **Store:** `apps/editor/stores/usePageStore.ts`
 
 ### State
-- `page` — full Page JSON
+- `site` — full Site JSON (root state)
+- `currentPageId` — ID of the page open in the editor canvas
 - `selectedBlockId` — currently selected block ID
-- `selectedBlock` — computed from `page.blocks`
-- `history[]` — undo stack (max 50 snapshots)
-- `future[]` — redo stack (cleared on any new mutation)
+- `history[]` — undo stack (Page snapshots, current page only, max 50)
+- `future[]` — redo stack (cleared on any new block mutation)
 
-### Actions
-- `setPage(page)` — loads page from API, does NOT create undo snapshot
+### Computed getters
+- `currentPage` — `site.pages.find(p => p.id === currentPageId)`
+- `page` — **backward-compat alias for `currentPage`** — all existing consumers read this unchanged
+- `selectedBlock` — block within `currentPage.blocks` matching `selectedBlockId`
+- `canUndo`, `canRedo`
+
+### Site actions
+- `setSite(site)` — loads full site, clears history, defaults `currentPageId` to first page
+- `setCurrentPage(id)` — switches active page; **clears undo/redo history** (undo is per-page)
+- `addPage(page)` — appends page, switches to it
+- `removePage(id)` — removes page (guards: never removes last page); switches to previous sibling
+
+### Block actions (operate on `currentPage`)
+- `addBlock(type)` — appends block with schema defaults, snapshots
 - `updateBlock(block, { snapshot })` — `snapshot: false` for live preview, `snapshot: true` for intentional commits
-- `addBlock(block)` — adds block, creates snapshot
-- `removeBlock(id)` — removes block, creates snapshot
-- `selectBlock(id | null)` — sets selected block
-- `undo()` / `redo()` — navigate history
+- `removeBlock(id)` — removes block, snapshots
+- `selectBlock(id | null)` — sets selected block (no snapshot)
+- `undo()` / `redo()` — restore/replay `currentPage` snapshots via `_replacePage()`
+- `setPage(page)` — backward-compat; updates current page or bootstraps minimal site
 
 ### Key design decisions
-- `BlockEditorModal` watches `selectedBlockId` (not `selectedBlock`) to reset draft — avoids circular update loop
+- `page` is a computed (not a ref) — `BlockEditorModal` and `usePageEditor` watch it unchanged
+- `_replacePage(updated)` is the single mutation point for all block changes — keeps `site.pages` reactive
+- Undo history is cleared on `setCurrentPage()` — history is scoped to the current page session
 - `savePage` and `publishSite` stay in `usePageEditor` as HTTP side effects, not in the store
 
 ---
@@ -145,16 +159,22 @@ type EditorMessage =
 - [x] Undo/Redo buttons in editor UI
 - [x] Composables: `usePageEditor`, `useBlockSelection`, `useDragDrop` (placeholder)
 - [x] `index.vue` reduced to thin component — zero business logic
+- [x] **Full Site model** — `Site`, `SiteLayout`, `SiteVersion`, `LayoutBlock`, `GridDefinition` types in `packages/contracts/page.ts`
+- [x] **Multi-page store** — `usePageStore` root state is `site` + `currentPageId`; `page` is a backward-compat computed alias; block actions operate on `currentPage`
+- [x] **Page tab switcher** — `index.vue` shows all pages in the site; `+ Página` creates new pages; switching clears undo history
+- [x] **Site-level load/save/publish** — `usePageEditor` loads via `GET /api/site`, saves full `Site` JSON, bumps semver patch on publish, records `publishedAt`
+- [x] **Version snapshots** — each publish saves a snapshot to `runtime_storage/{siteId}/versions/{version}/site.json`
+- [x] **Version history API** — `GET /api/:siteId/versions` returns `SiteVersion[]` newest-first; `versionHistory` ref in `usePageEditor`
+- [x] **Rollback API** — `POST /api/:siteId/rollback/:version` restores a snapshot and explodes per-page files
+- [x] **Auto-migration** — on first `GET /api/site`, `readSiteFull` wraps existing `data/pages/*.json` into `site.json` transparently
+- [x] **Build server** — new modules: `readSiteFull.ts`, `saveSiteFull.ts`, `versionManager.ts`; `GET/POST /site`, `/versions`, `/rollback` routes added to `server.ts`; `GET /page/:slug` still works (reads from `site.json` first)
 
 ---
 
 ## Roadmap — Pending Features
 
-### 1. Multi-Page Site Model
-- Evolve `Page` → `Site` with `pages[]`, `layout` (header/footer/grids)
-- Publishing = full site versioned snapshot, not individual pages
-- Version history with rollback support
-- `node-build-server` must generate and serve versioned site bundles
+### 1. ✅ Multi-Page Site Model — COMPLETE
+All sub-tasks done. `Site` model implemented, multi-page store, page tabs, site-level save/publish, version snapshots, rollback API, auto-migration.
 
 ### 2. Layouts, Header, Footer, Grids
 - New block category: `LayoutBlock` — shared across all pages (header, footer, nav menu)
@@ -199,12 +219,12 @@ type EditorMessage =
 - All three flows must work with local LLMs (vision models like LLaVA for screenshot analysis)
 - Block schemas in `packages/ui/schemas/` are serialized and sent as LLM context in all flows
 
-### 8. Versioned Site Publishing
-- Publishing creates a versioned snapshot of the entire site (all pages + layout + CSS)
-- Version format: semver (`v1.0.0`) or timestamp-based
-- `node-build-server` stores each version separately — no overwrite
-- UI shows version history with rollback option
-- Output: static HTML + CSS + assets per version, CDN-friendly
+### 8. Versioned Site Publishing — partially complete ✅
+- ✅ Version snapshots saved to `runtime_storage/{siteId}/versions/{version}/site.json` on every publish
+- ✅ `GET /api/:siteId/versions` returns `SiteVersion[]`; `versionHistory` ref exposed from `usePageEditor`
+- ✅ `POST /api/:siteId/rollback/:version` restores a snapshot and explodes per-page files
+- Pending: UI for browsing and rolling back versions (requires a version history panel in `index.vue`)
+- Pending: CSS versioning per snapshot (currently only `site.json` is snapshotted, not the built static assets)
 
 ### 9. Collaborative Editing
 - Multiple team members can edit the same site simultaneously
@@ -263,6 +283,7 @@ Implications:
 ## Known Limitations (to address)
 - File system used as database — needs Postgres/MongoDB for multi-user and versioning
 - No single block registration point — adding blocks requires changes in 3 places
-- Current data model is single-page — needs Site model for multi-page support
 - No CSP/nonce system yet
 - No collaborative editing support yet
+- Version rollback UI not yet built (API exists — `versionHistory` ref is available in `usePageEditor`)
+- `siteId` is hardcoded as `'demosite'` throughout — needs to become dynamic for multi-tenant SaaS
