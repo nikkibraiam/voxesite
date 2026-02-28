@@ -108,6 +108,17 @@ onMounted(() => {
     if (event.data.type === 'LAYOUT_UPDATE') {
       layout.value = event.data.payload
     }
+
+    if (event.data.type === 'AI_PATCH') {
+      // Apply a full or partial page update from the AI editor.
+      // Merges onto the current page so existing blocks are preserved if the
+      // payload is a Partial<Page>.
+      if (page.value && event.data.payload) {
+        page.value = { ...page.value, ...event.data.payload } as Page
+        regenerateStyles(page.value)
+        styleVersion.value = Date.now()
+      }
+    }
   })
 })
 </script>

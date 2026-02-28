@@ -6,6 +6,8 @@ import { readSite } from './readSite'
 import { readSiteFull } from './readSiteFull'
 import { saveSiteFull } from './saveSiteFull'
 import { saveVersion, listVersions, rollbackVersion } from './versionManager'
+import { createLLMAdapter } from './llm/factory'
+import type { LLMMessage } from './llm/types'
 
 const app = express()
 
@@ -125,6 +127,97 @@ app.post('/api/:siteId/build', async (req, res) => {
     res.status(500).json({ ok: false, error })
   }
 })
+
+// ─── AI prompt route ──────────────────────────────────────────────────────────
+
+/**
+ * POST /api/ai/prompt
+ * Body: { prompt: string, pageJson: Page, siteId: string, schemaContext: string }
+ *
+ * schemaContext is the JSON-serialized BlockSchemas + LayoutSchemas sent by the
+ * Nuxt proxy (which has access to @cms/ui and can serialize them at request time).
+ *
+ * Supports SSE streaming when Accept: text/event-stream is present.
+ * Non-streaming returns { ok: true, page: Page } or { ok: false, error, raw }.
+ */
+app.post('/api/ai/prompt', async (req, res) => {
+  const { prompt, pageJson, schemaContext } = req.body as {
+    prompt: string
+    pageJson: any
+    siteId: string
+    schemaContext: string
+  }
+
+  if (!prompt || !pageJson) {
+    res.status(400).json({ ok: false, error: 'prompt and pageJson are required' })
+    return
+  }
+
+  const wantsStream = (req.headers['accept'] ?? '').includes('text/event-stream')
+
+  const messages: LLMMessage[] = [
+    {
+      role: 'system',
+      content: buildSystemPrompt(schemaContext, pageJson)
+    },
+    {
+      role: 'user',
+      content: prompt
+    }
+  ]
+
+  const adapter = createLLMAdapter()
+
+  if (wantsStream) {
+    res.setHeader('Content-Type', 'text/event-stream')
+    res.setHeader('Cache-Control', 'no-cache')
+    res.setHeader('Connection', 'keep-alive')
+    res.flushHeaders()
+
+    try {
+      const fullText = await adapter.chatStream(messages, (token) => {
+        res.write(`data: ${JSON.stringify({ token })}\n\n`)
+      })
+
+      // Signal completion with the full accumulated text
+      res.write(`data: ${JSON.stringify({ done: true, text: fullText })}\n\n`)
+      res.end()
+    } catch (err: any) {
+      res.write(`data: ${JSON.stringify({ error: err.message ?? 'LLM error' })}\n\n`)
+      res.end()
+    }
+  } else {
+    try {
+      const text = await adapter.chat(messages)
+      try {
+        const page = JSON.parse(text)
+        res.json({ ok: true, page })
+      } catch {
+        res.json({ ok: false, error: 'Invalid LLM response', raw: text })
+      }
+    } catch (err: any) {
+      res.status(500).json({ ok: false, error: err.message ?? 'LLM error' })
+    }
+  }
+})
+
+function buildSystemPrompt(schemaContext: string, pageJson: any): string {
+  return `You are a CMS block editor assistant. The user will describe changes they want to make to a website page.
+You must return ONLY a valid JSON object matching the Page schema. No explanation, no markdown fences, no code blocks.
+
+Available block types and their schemas:
+${schemaContext}
+
+Current page JSON:
+${JSON.stringify(pageJson, null, 2)}
+
+Rules:
+- Return the complete updated Page JSON, not a diff
+- Preserve all block IDs unless explicitly asked to remove a block
+- Only modify props and styles mentioned by the user
+- Do not invent new block types not listed in the schemas above
+- If unsure, return the page unchanged`
+}
 
 // ─── Static serve ─────────────────────────────────────────────────────────────
 

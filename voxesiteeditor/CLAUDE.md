@@ -42,13 +42,20 @@ voxesiteeditor/
 | `apps/editor/pages/index.vue` | ✅ Thin component — Layout tab + page tabs + `+ Página` button + draggable block list + iframe |
 | `apps/editor/server/api/site.get.ts` | ✅ `GET /api/site` — proxies to build server, triggers migration on first load |
 | `apps/editor/server/api/save.post.ts` | ✅ `POST /api/save` — accepts full `Site`, generates per-page CSS |
+| `apps/editor/server/api/ai-prompt.post.ts` | ✅ `POST /api/ai-prompt` — thin proxy to build server AI route; serializes schema context from `@cms/ui`; SSE streaming passthrough |
 | `apps/editor/components/BlockEditorPanel.vue` | ✅ Right-side sliding panel editor — Tweakpane inspector, handles page + layout blocks |
+| `apps/editor/components/AiPromptPanel.vue` | ✅ Bottom sliding AI panel — prompt textarea, streamed output, error state, Ctrl+Enter submit |
 | `apps/editor/composables/useBlockEditorPanel.ts` | ✅ Panel open/close state — auto-opens on block/layout selection |
+| `apps/editor/composables/useAiEditor.ts` | ✅ AI panel state + streaming fetch + undo snapshot + `AI_PATCH` postMessage |
 | `apps/runtime/pages/[slug].vue` | ✅ Renders header + page blocks + footer from site JSON, uses typed messages |
 | `node-build-server/src/readSiteFull.ts` | ✅ Read `site.json`; auto-migrates from `data/pages/*.json` on first access |
 | `node-build-server/src/saveSiteFull.ts` | ✅ Write `site.json` + explode per-page files + CSS |
 | `node-build-server/src/versionManager.ts` | ✅ `saveVersion`, `listVersions`, `rollbackVersion` |
-| `node-build-server/src/server.ts` | ✅ Express routes — includes Site CRUD, versions, rollback |
+| `node-build-server/src/server.ts` | ✅ Express routes — includes Site CRUD, versions, rollback, AI prompt |
+| `node-build-server/src/llm/types.ts` | ✅ `LLMMessage`, `LLMAdapter` interface |
+| `node-build-server/src/llm/openaiAdapter.ts` | ✅ OpenAI-compatible adapter (OpenAI + Ollama) |
+| `node-build-server/src/llm/anthropicAdapter.ts` | ✅ Anthropic Messages API adapter |
+| `node-build-server/src/llm/factory.ts` | ✅ `createLLMAdapter()` — reads `LLM_PROVIDER` env var, returns correct adapter |
 
 ---
 
@@ -228,6 +235,7 @@ type EditorMessage =
 - [x] **Runtime layout rendering** — `[slug].vue` fetches full site (`GET /api/demosite/site`), renders `LayoutHeader` above and `LayoutFooter` below page blocks; layout blocks are `SelectableBlock`-wrapped in editor mode
 - [x] **Professional Block Editor UI** — Right-side sliding panel (`BlockEditorPanel.vue`) replaces `BlockEditorModal`; Tweakpane for `string`/`boolean`/`color` fields (inspector-style); plain `<textarea>` for `json` and `css` fields; live preview on every change (`snapshot: false`); commits undo snapshot on close (`snapshot: true`); Escape key + close button (44×44 px touch target); full-width on mobile (`≤600px`); `useBlockEditorPanel` composable auto-opens/closes on store selection change; handles both page blocks and layout blocks via same `draftContext` pattern
 - [x] **Drag & Drop block reordering** — `vue-draggable-plus` (SortableJS) in editor block list panel; `reorderBlocks(fromIndex, toIndex)` store action creates undo snapshot before splice; `useDragDrop` composable provides `draggableBlocks` computed (get/set) + `sortableOptions`; `SelectableBlock` extended with 44×44 px drag handle (`touch-action:none` for WebView); `PAGE_UPDATE` fires automatically via existing `usePageEditor` deep-watch after every reorder
+- [x] **AI Prompt Space** — collapsible bottom panel (`AiPromptPanel.vue`), `useAiEditor()` composable, `LLMAdapter` interface with OpenAI/Ollama/Anthropic implementations, SSE streaming with token-by-token display, `AI_PATCH` postMessage to runtime for live preview, undo-integrated via manual history snapshot before `store.setPage()`; schema context serialized by Nuxt proxy and embedded in LLM system prompt; `POST /api/ai/prompt` on build server; env vars: `LLM_PROVIDER`, `LLM_BASE_URL`, `LLM_MODEL`, `LLM_API_KEY`
 
 ---
 
@@ -259,13 +267,14 @@ All sub-tasks done. `LayoutHeader` + `LayoutFooter` block types, schemas, compon
 - Handles both page blocks and layout blocks (header/footer) via `draftContext`
 - `BlockEditorModal.vue` deleted; `index.vue` restructured into sidebar + preview flex layout
 
-### 5. AI Prompt Space
-- Panel in editor UI for natural language instructions
-- Create `useAiEditor()` composable
-- Server-side Nuxt API route: receives `{ prompt, currentPageJson }`, calls LLM, returns modified Page JSON
-- Apply result through `usePageStore.setPage()` (creates undo snapshot first)
-- Support streaming responses for real-time feel (`AI_PATCH` messages via postMessage)
-- **LLM strategy:** Must support local LLMs via Ollama-compatible API (OpenAI-compatible `/v1/chat/completions` endpoint). Also support cloud LLMs (Claude, OpenAI) via the same interface. Use an adapter pattern so the LLM provider is swappable via env vars.
+### 5. ✅ AI Prompt Space — COMPLETE
+- `AiPromptPanel.vue` — bottom sliding panel, shrinks iframe via flex column layout; prompt textarea (Ctrl+Enter submit), streamed token display, error area, 44×44 px touch targets
+- `useAiEditor()` composable — `isAiPanelOpen`, `aiPrompt`, `isLoading`, `aiError`, `streamedTokens`; SSE fetch with token accumulation; manual undo snapshot + `store.setPage()` + `AI_PATCH` postMessage on completion
+- `apps/editor/server/api/ai-prompt.post.ts` — serializes `BlockSchemas`+`LayoutSchemas` from `@cms/ui`, forwards to build server with SSE streaming passthrough via `sendStream`
+- `node-build-server/src/llm/` — `LLMAdapter` interface, `OpenAIAdapter` (OpenAI + Ollama), `AnthropicAdapter`, `createLLMAdapter()` factory
+- `POST /api/ai/prompt` on build server — builds LLM system prompt with schema + page context; streams SSE tokens or returns JSON
+- Runtime `AI_PATCH` handler in `[slug].vue` — merges partial page payload onto current page for live preview
+- `.env.example` documents `LLM_PROVIDER`, `LLM_BASE_URL`, `LLM_MODEL`, `LLM_API_KEY`
 
 ### 6. Voice Input + Text-to-Voice
 - Voice is captured in the mobile app (or browser), sent as audio packets via postMessage (`VOICE_INPUT`)

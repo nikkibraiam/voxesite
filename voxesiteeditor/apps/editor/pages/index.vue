@@ -3,10 +3,12 @@ import { VueDraggable } from 'vue-draggable-plus'
 import { BlockSchemas } from '@cms/ui/schemas'
 import SelectableBlock from '@cms/ui/wrappers/SelectableBlock.vue'
 import BlockEditorPanel from '../components/BlockEditorPanel.vue'
+import AiPromptPanel from '../components/AiPromptPanel.vue'
 import { usePageStore } from '../stores/usePageStore'
 import { usePageEditor } from '../composables/usePageEditor'
 import { useLayoutEditor } from '../composables/useLayoutEditor'
 import { useDragDrop } from '../composables/useDragDrop'
+import { useAiEditor } from '../composables/useAiEditor'
 
 const store = usePageStore()
 const { savePage, publishSite } = usePageEditor()
@@ -20,6 +22,7 @@ const {
   addOrSelectFooter
 } = useLayoutEditor()
 const { draggableBlocks, sortableOptions } = useDragDrop()
+const { isAiPanelOpen, toggleAiPanel } = useAiEditor()
 
 function addNewPage() {
   store.addPage({
@@ -52,6 +55,14 @@ function addNewPage() {
       </button>
 
       <button @click="addNewPage">+ Página</button>
+
+      <!-- AI toggle — right-aligned -->
+      <button
+        class="ai-toggle-btn"
+        :class="{ active: isAiPanelOpen }"
+        title="Panel de IA (✨)"
+        @click="toggleAiPanel"
+      >✨ IA</button>
     </div>
 
     <!-- ── Main content row: sidebar + iframe ──────────────────────────────── -->
@@ -160,6 +171,9 @@ function addNewPage() {
     </div>
   </div>
 
+  <!-- AI prompt panel — slides up from the bottom, shrinks the iframe -->
+  <AiPromptPanel />
+
   <!-- Side panel — slides in from the right, sits over the iframe -->
   <BlockEditorPanel />
 </template>
@@ -211,6 +225,20 @@ function addNewPage() {
   background: #4a90d9;
   color: #fff;
   border-color: #4a90d9;
+}
+
+/* AI toggle — push to the right end of the tab bar */
+.ai-toggle-btn {
+  margin-left: auto;
+  background: #1a1a2e;
+  color: #9090d0;
+  border-color: #2e2e50;
+}
+
+.ai-toggle-btn.active {
+  background: #5858c8 !important;
+  color: #fff !important;
+  border-color: #5858c8 !important;
 }
 
 /* ── Body row: sidebar + preview ────────────────────────────────────────────── */
