@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue'
 import type { Page } from '@cms/contracts'
+import { isEditorMessage, sendEditorMessage } from '@cms/contracts'
 import { renderBlock } from '@cms/ui'
 import { SelectableBlock } from '@cms/ui/wrappers'
 import { generateBlockCss } from '@cms/utils'
+
+const EDITOR_ORIGIN = 'http://localhost:3000'
 
 const route = useRoute()
 const slug = route.params.slug as string
@@ -13,7 +16,7 @@ const { data, error } : any = await useFetch(
 )
 
 const page = ref<Page | null>(data.value?.data)
-  
+
 const isEditor = ref(false)
 
 const dynamicStyleTag = ref<HTMLStyleElement | null>(null)
@@ -59,11 +62,12 @@ useHead({
 })
 
 function onBlockSelect(blockId: string) {
-  if (!isEditor) return
+  if (!isEditor.value) return
 
-  window.parent.postMessage(
-    { type: 'BLOCK_SELECT', blockId },
-    'http://localhost:3000'
+  sendEditorMessage(
+    window.parent,
+    { type: 'BLOCK_SELECT', payload: { blockId } },
+    EDITOR_ORIGIN
   )
 }
 
@@ -73,16 +77,15 @@ onMounted(() => {
   if (!isEditor.value) return
 
   window.addEventListener('message', (event) => {
-    if (event.origin !== 'http://localhost:3000') return
+    if (event.origin !== EDITOR_ORIGIN) return
+    if (!isEditorMessage(event.data)) return
 
-    if (event.data?.type === 'PAGE_SAVED') {
-      page.value = event.data.page
-      regenerateStyles(event.data.page)
+    // PAGE_UPDATE covers both live preview syncs and post-save pushes.
+    // Always regenerate styles so block CSS stays in sync.
+    if (event.data.type === 'PAGE_UPDATE') {
+      page.value = event.data.payload
+      regenerateStyles(event.data.payload)
       styleVersion.value = Date.now()
-      return
-    }
-    if (event.data?.type == 'ADD_BLOCK'){
-      page.value = event.data.page
     }
   })
 })
