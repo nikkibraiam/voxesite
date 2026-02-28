@@ -42,7 +42,8 @@ voxesiteeditor/
 | `apps/editor/pages/index.vue` | ✅ Thin component — Layout tab + page tabs + `+ Página` button + draggable block list + iframe |
 | `apps/editor/server/api/site.get.ts` | ✅ `GET /api/site` — proxies to build server, triggers migration on first load |
 | `apps/editor/server/api/save.post.ts` | ✅ `POST /api/save` — accepts full `Site`, generates per-page CSS |
-| `apps/editor/modals/BlockEditorModal.vue` | ✅ Block/layout property editor — handles both page blocks and layout blocks |
+| `apps/editor/components/BlockEditorPanel.vue` | ✅ Right-side sliding panel editor — Tweakpane inspector, handles page + layout blocks |
+| `apps/editor/composables/useBlockEditorPanel.ts` | ✅ Panel open/close state — auto-opens on block/layout selection |
 | `apps/runtime/pages/[slug].vue` | ✅ Renders header + page blocks + footer from site JSON, uses typed messages |
 | `node-build-server/src/readSiteFull.ts` | ✅ Read `site.json`; auto-migrates from `data/pages/*.json` on first access |
 | `node-build-server/src/saveSiteFull.ts` | ✅ Write `site.json` + explode per-page files + CSS |
@@ -201,7 +202,7 @@ type EditorMessage =
 - [x] Typed postMessage protocol (`EditorMessage`, `sendEditorMessage`, `isEditorMessage`)
 - [x] SSR runtime with static generation support
 - [x] Pinia store (`usePageStore`) with undo/redo (50-entry history)
-- [x] `BlockEditorModal` reads/writes through store
+- [x] `BlockEditorPanel` (side panel) reads/writes through store — replaces modal pattern
 - [x] Undo/Redo buttons in editor UI
 - [x] Composables: `usePageEditor`, `useBlockSelection`, `useDragDrop`
 - [x] `index.vue` reduced to thin component — zero business logic
@@ -225,7 +226,7 @@ type EditorMessage =
 - [x] **LAYOUT_UPDATE message** — `usePageEditor` deep-watches `store.site.layout` and pushes changes to iframe in real-time
 - [x] **LAYOUT_BLOCK_SELECT message** — runtime sends slot name when header/footer clicked; `usePageEditor` routes to `store.selectLayoutBlock(slot)`
 - [x] **Runtime layout rendering** — `[slug].vue` fetches full site (`GET /api/demosite/site`), renders `LayoutHeader` above and `LayoutFooter` below page blocks; layout blocks are `SelectableBlock`-wrapped in editor mode
-- [x] **BlockEditorModal extended** — handles both page blocks and layout blocks; `draftContext` tracks which; dispatches to correct store action; supports `'boolean'`, `'color'`, and `'json'` field types in addition to `'string'` and `'css'`
+- [x] **Professional Block Editor UI** — Right-side sliding panel (`BlockEditorPanel.vue`) replaces `BlockEditorModal`; Tweakpane for `string`/`boolean`/`color` fields (inspector-style); plain `<textarea>` for `json` and `css` fields; live preview on every change (`snapshot: false`); commits undo snapshot on close (`snapshot: true`); Escape key + close button (44×44 px touch target); full-width on mobile (`≤600px`); `useBlockEditorPanel` composable auto-opens/closes on store selection change; handles both page blocks and layout blocks via same `draftContext` pattern
 - [x] **Drag & Drop block reordering** — `vue-draggable-plus` (SortableJS) in editor block list panel; `reorderBlocks(fromIndex, toIndex)` store action creates undo snapshot before splice; `useDragDrop` composable provides `draggableBlocks` computed (get/set) + `sortableOptions`; `SelectableBlock` extended with 44×44 px drag handle (`touch-action:none` for WebView); `PAGE_UPDATE` fires automatically via existing `usePageEditor` deep-watch after every reorder
 
 ---
@@ -249,14 +250,14 @@ All sub-tasks done. `LayoutHeader` + `LayoutFooter` block types, schemas, compon
 - Reorder triggers `PAGE_UPDATE` automatically via existing `usePageEditor` deep-watch — no extra postMessage code needed
 - Pending: drag & drop within the **iframe** preview (runtime-side) — currently only the editor panel list is draggable
 
-### 4. Professional Block Editor UI
-- Current: modal opens on block click — works but may not scale well to mobile
-- Options to evaluate:
-  - **Side panel** — editor slides in from the right, block stays visible in context
-  - **Inline editing** — click directly on text/color in the preview to edit
-  - **Floating toolbar** — appears near the selected block
-- Decision criteria: must work well in both desktop browser and mobile WebView
-- The selected approach must keep the live preview visible while editing
+### 4. ✅ Professional Block Editor UI — COMPLETE
+- `BlockEditorPanel.vue` — fixed right-side panel (320px desktop, full-width mobile), slides in with CSS transition
+- `useBlockEditorPanel.ts` — composable managing `isPanelOpen` + `panelMode`; auto-opens/closes via watch on store selection
+- Tweakpane (`tweakpane@^4.0.5`) for `string`, `boolean`, `color` fields; plain `<textarea>` for `json` and `css`
+- Live preview on every Tweakpane `change` event (`snapshot: false`); one undo snapshot committed on panel close
+- Escape key + visible close button (44×44 px) — keyboard and touch accessible
+- Handles both page blocks and layout blocks (header/footer) via `draftContext`
+- `BlockEditorModal.vue` deleted; `index.vue` restructured into sidebar + preview flex layout
 
 ### 5. AI Prompt Space
 - Panel in editor UI for natural language instructions
