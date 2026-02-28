@@ -56,6 +56,8 @@ voxesiteeditor/
 | `node-build-server/src/llm/openaiAdapter.ts` | ✅ OpenAI-compatible adapter (OpenAI + Ollama) |
 | `node-build-server/src/llm/anthropicAdapter.ts` | ✅ Anthropic Messages API adapter |
 | `node-build-server/src/llm/factory.ts` | ✅ `createLLMAdapter()` — reads `LLM_PROVIDER` env var, returns correct adapter |
+| `node-build-server/src/transcription/whisperAdapter.ts` | ✅ `TranscriptionAdapter` interface, `WhisperAdapter` (POST /asr multipart), `MockWhisperAdapter` (dev fallback), `createTranscriptionAdapter()` factory |
+| `apps/editor/composables/useVoiceInput.ts` | ✅ WebSocket manager for voice transcription — listens for `VOICE_INPUT` postMessages from native, forwards audio to WS, streams `liveTranscript`, populates `aiPrompt` on `TRANSCRIPT_DONE` |
 
 ---
 
@@ -236,6 +238,7 @@ type EditorMessage =
 - [x] **Professional Block Editor UI** — Right-side sliding panel (`BlockEditorPanel.vue`) replaces `BlockEditorModal`; Tweakpane for `string`/`boolean`/`color` fields (inspector-style); plain `<textarea>` for `json` and `css` fields; live preview on every change (`snapshot: false`); commits undo snapshot on close (`snapshot: true`); Escape key + close button (44×44 px touch target); full-width on mobile (`≤600px`); `useBlockEditorPanel` composable auto-opens/closes on store selection change; handles both page blocks and layout blocks via same `draftContext` pattern
 - [x] **Drag & Drop block reordering** — `vue-draggable-plus` (SortableJS) in editor block list panel; `reorderBlocks(fromIndex, toIndex)` store action creates undo snapshot before splice; `useDragDrop` composable provides `draggableBlocks` computed (get/set) + `sortableOptions`; `SelectableBlock` extended with 44×44 px drag handle (`touch-action:none` for WebView); `PAGE_UPDATE` fires automatically via existing `usePageEditor` deep-watch after every reorder
 - [x] **AI Prompt Space** — collapsible bottom panel (`AiPromptPanel.vue`), `useAiEditor()` composable, `LLMAdapter` interface with OpenAI/Ollama/Anthropic implementations, SSE streaming with token-by-token display, `AI_PATCH` postMessage to runtime for live preview, undo-integrated via manual history snapshot before `store.setPage()`; schema context serialized by Nuxt proxy and embedded in LLM system prompt; `POST /api/ai/prompt` on build server; env vars: `LLM_PROVIDER`, `LLM_BASE_URL`, `LLM_MODEL`, `LLM_API_KEY`
+- [x] **Voice Input + Text-to-Voice hook** — WebSocket transcription server (`ws` package) on `/transcription` path sharing port 2999; `TranscriptionAdapter` interface with `WhisperAdapter` (POST /asr multipart, faster-whisper / whisper.cpp compatible) and `MockWhisperAdapter` (dev fallback when `WHISPER_BASE_URL` unset); WS protocol: `VOICE_CHUNK` / `VOICE_END` client→server, `TRANSCRIPT_TOKEN` / `TRANSCRIPT_DONE` / `TRANSCRIPT_ERROR` server→client; `useVoiceInput()` composable — listens for `VOICE_INPUT` postMessages from native layer, forwards audio chunks via WS, accumulates `liveTranscript` ref, populates `aiPrompt` on completion; mic button in `AiPromptPanel` (44×44 px, pulsing red ring while listening, ghost placeholder text shows live transcript); `AI_VOICE_RESPONSE` postMessage sent by `useAiEditor` after SSE completes — forwarded by runtime to native container for TTS (no web audio playback); env vars: `WHISPER_BASE_URL`, `NUXT_PUBLIC_WS_URL`; native TTS integration pending (separate phase — see Android/iOS TODO comments)
 
 ---
 
@@ -276,11 +279,16 @@ All sub-tasks done. `LayoutHeader` + `LayoutFooter` block types, schemas, compon
 - Runtime `AI_PATCH` handler in `[slug].vue` — merges partial page payload onto current page for live preview
 - `.env.example` documents `LLM_PROVIDER`, `LLM_BASE_URL`, `LLM_MODEL`, `LLM_API_KEY`
 
-### 6. Voice Input + Text-to-Voice
-- Voice is captured in the mobile app (or browser), sent as audio packets via postMessage (`VOICE_INPUT`)
-- Editor backend transcribes audio (Whisper or compatible local model) → feeds transcript into AI prompt pipeline
-- **Text-to-Voice response:** AI response is spoken back to the user (TTS) for a conversational feel. Use local TTS model or browser `SpeechSynthesis` API as fallback.
-- New message types: `VOICE_INPUT`, `VOICE_TRANSCRIPT`, `AI_VOICE_RESPONSE`
+### 6. ✅ Voice Input + Text-to-Voice — COMPLETE (web layer)
+- ✅ WebSocket transcription server at `ws://localhost:2999/transcription` (shared port with Express via `http.createServer`)
+- ✅ `TranscriptionAdapter` interface — `WhisperAdapter` (POST /asr multipart) + `MockWhisperAdapter` dev fallback
+- ✅ WS message protocol: `VOICE_CHUNK` / `VOICE_END` → `TRANSCRIPT_TOKEN` / `TRANSCRIPT_DONE` / `TRANSCRIPT_ERROR`
+- ✅ `useVoiceInput()` composable — native postMessage listener + WS client + `liveTranscript` ref + `aiPrompt` population
+- ✅ Mic button in `AiPromptPanel` (44×44 px touch target, pulsing red ring, ghost transcript placeholder)
+- ✅ `AI_VOICE_RESPONSE` message type — sent by editor after AI completes, forwarded by runtime to native container
+- ✅ New message types: `VOICE_INPUT`, `VOICE_TRANSCRIPT`, `AI_VOICE_RESPONSE` in `@cms/contracts`
+- ✅ Env vars: `WHISPER_BASE_URL` (node-build-server), `NUXT_PUBLIC_WS_URL` (editor)
+- **Pending (separate phase):** Native Android/iOS TTS integration — Android should use `TextToSpeech` API, iOS should use `AVSpeechSynthesizer` when the WebView emits an `AI_VOICE_RESPONSE` postMessage. See TODO comments in `useAiEditor.ts` and `[slug].vue`.
 
 ### 7. Page Generation from URL or Screenshot
 - **URL → Site JSON:** Server fetches URL (Puppeteer/headless browser), extracts HTML, sends to LLM with block schema as context → returns `Page` JSON

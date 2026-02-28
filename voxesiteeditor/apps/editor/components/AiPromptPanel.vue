@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { usePageStore } from '../stores/usePageStore'
 import { useAiEditor } from '../composables/useAiEditor'
+import { useVoiceInput } from '../composables/useVoiceInput'
 
 const store = usePageStore()
 const {
@@ -14,10 +15,22 @@ const {
   clearPrompt
 } = useAiEditor()
 
+const { isListening, liveTranscript, startListening, stopListening } = useVoiceInput({
+  aiPrompt
+})
+
 function onKeydown(e: KeyboardEvent) {
   if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
     e.preventDefault()
     submitPrompt()
+  }
+}
+
+function toggleMic() {
+  if (isListening.value) {
+    stopListening()
+  } else {
+    startListening()
   }
 }
 </script>
@@ -62,11 +75,16 @@ function onKeydown(e: KeyboardEvent) {
           {{ aiError }}
         </div>
 
-        <!-- Prompt textarea -->
+        <!-- Prompt textarea
+             While listening: liveTranscript is shown as ghost placeholder text.
+             When TRANSCRIPT_DONE arrives: aiPrompt is populated and ready to submit. -->
         <textarea
           v-model="aiPrompt"
           class="ai-panel__textarea"
-          placeholder="Describe los cambios que quieres hacer en la página… (Ctrl+Enter para enviar)"
+          :class="{ 'ai-panel__textarea--listening': isListening }"
+          :placeholder="isListening
+            ? (liveTranscript || 'Escuchando…')
+            : 'Describe los cambios que quieres hacer en la página… (Ctrl+Enter para enviar)'"
           rows="3"
           :disabled="isLoading"
           @keydown="onKeydown"
@@ -81,6 +99,19 @@ function onKeydown(e: KeyboardEvent) {
           :disabled="isLoading"
           @click="clearPrompt"
         >Limpiar</button>
+
+        <!-- Mic button — 44×44 px touch target -->
+        <button
+          class="ai-panel__mic"
+          type="button"
+          :class="{ 'ai-panel__mic--listening': isListening }"
+          :aria-label="isListening ? 'Detener grabación de voz' : 'Iniciar entrada de voz'"
+          :disabled="isLoading"
+          @click="toggleMic"
+        >
+          <span class="ai-panel__mic-icon" aria-hidden="true">🎤</span>
+          <span v-if="isListening" class="ai-panel__mic-pulse" aria-hidden="true" />
+        </button>
 
         <button
           class="ai-panel__btn ai-panel__btn--primary"
@@ -286,6 +317,70 @@ function onKeydown(e: KeyboardEvent) {
 
 @keyframes ai-spin {
   to { transform: rotate(360deg); }
+}
+
+/* Textarea listening state — pulsing border to indicate active recording */
+.ai-panel__textarea--listening {
+  border-color: #c84040;
+  animation: ai-border-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes ai-border-pulse {
+  0%, 100% { border-color: #c84040; }
+  50%       { border-color: #ff6060; }
+}
+
+/* ── Mic button ─────────────────────────────────────────────────────────────── */
+.ai-panel__mic {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: none;
+  border-radius: 50%;
+  background: #2e2e50;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+
+.ai-panel__mic:not(:disabled):hover {
+  background: #3a3a70;
+}
+
+.ai-panel__mic:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.ai-panel__mic--listening {
+  background: #4a1010;
+}
+
+.ai-panel__mic--listening:not(:disabled):hover {
+  background: #6e1a1a;
+}
+
+.ai-panel__mic-icon {
+  font-size: 18px;
+  line-height: 1;
+}
+
+/* Pulsing red ring visible while recording */
+.ai-panel__mic-pulse {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid #ff4040;
+  animation: mic-pulse 1s ease-out infinite;
+  pointer-events: none;
+}
+
+@keyframes mic-pulse {
+  0%   { transform: scale(1);    opacity: 0.9; }
+  100% { transform: scale(1.6);  opacity: 0; }
 }
 
 /* ── Slide-up transition ────────────────────────────────────────────────────── */

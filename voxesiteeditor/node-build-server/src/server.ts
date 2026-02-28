@@ -1,5 +1,8 @@
+import { createServer } from 'http'
 import express from 'express'
 import cors from 'cors'
+import { WebSocketServer } from 'ws'
+import type { WebSocket as WsSocket } from 'ws'
 import { saveSite } from './saveSite'
 import { buildSite } from './buildSite'
 import { readSite } from './readSite'
@@ -8,6 +11,7 @@ import { saveSiteFull } from './saveSiteFull'
 import { saveVersion, listVersions, rollbackVersion } from './versionManager'
 import { createLLMAdapter } from './llm/factory'
 import type { LLMMessage } from './llm/types'
+import { createTranscriptionAdapter } from './transcription/whisperAdapter'
 
 const app = express()
 
@@ -223,7 +227,109 @@ Rules:
 
 app.use('/assets', express.static('./public_builds'))
 
+// ─── HTTP server + WebSocket server ──────────────────────────────────────────
+//
+// We create an explicit http.Server so the WebSocket server can share the same
+// port as Express (ws upgrade requests are routed by path).
+
+const httpServer = createServer(app)
+
+// ─── WebSocket transcription server (/transcription) ─────────────────────────
+//
+// Protocol (JSON over WebSocket):
+//
+//   Client → Server:
+//     { type: "VOICE_CHUNK", payload: { audio: "<base64>", mimeType: "audio/webm" } }
+//     { type: "VOICE_END" }          ← signals end of audio; triggers transcription
+//
+//   Server → Client:
+//     { type: "TRANSCRIPT_TOKEN",  payload: { token: "Hello" } }
+//     { type: "TRANSCRIPT_DONE",   payload: { fullText: "Hello world" } }
+//     { type: "TRANSCRIPT_ERROR",  payload: { message: "..." } }
+
+const wss = new WebSocketServer({ server: httpServer, path: '/transcription' })
+
+wss.on('connection', (socket: WsSocket) => {
+  console.log('[WS /transcription] Client connected')
+
+  // Buffer for accumulated audio chunks from this session
+  const audioChunks: Buffer[] = []
+  let sessionMimeType = 'audio/webm'
+
+  socket.on('message', async (rawData) => {
+    let msg: { type: string; payload?: any }
+    try {
+      msg = JSON.parse(rawData.toString())
+    } catch {
+      return // ignore malformed frames
+    }
+
+    if (msg.type === 'VOICE_CHUNK') {
+      const { audio, mimeType } = msg.payload ?? {}
+      if (typeof audio === 'string') {
+        audioChunks.push(Buffer.from(audio, 'base64'))
+      }
+      if (mimeType) sessionMimeType = mimeType
+    }
+
+    if (msg.type === 'VOICE_END') {
+      if (audioChunks.length === 0) {
+        socket.send(
+          JSON.stringify({
+            type: 'TRANSCRIPT_ERROR',
+            payload: { message: 'No audio chunks received before VOICE_END' }
+          })
+        )
+        return
+      }
+
+      const fullBuffer = Buffer.concat(audioChunks)
+      audioChunks.length = 0 // clear for potential next session on same socket
+
+      const adapter = createTranscriptionAdapter()
+      let fullText = ''
+
+      try {
+        for await (const token of adapter.transcribe(fullBuffer, sessionMimeType)) {
+          fullText += token
+          if (socket.readyState === socket.OPEN) {
+            socket.send(
+              JSON.stringify({ type: 'TRANSCRIPT_TOKEN', payload: { token } })
+            )
+          }
+        }
+
+        if (socket.readyState === socket.OPEN) {
+          socket.send(
+            JSON.stringify({
+              type: 'TRANSCRIPT_DONE',
+              payload: { fullText: fullText.trim() }
+            })
+          )
+        }
+      } catch (err: any) {
+        if (socket.readyState === socket.OPEN) {
+          socket.send(
+            JSON.stringify({
+              type: 'TRANSCRIPT_ERROR',
+              payload: { message: err.message ?? 'Transcription failed' }
+            })
+          )
+        }
+      }
+    }
+  })
+
+  socket.on('close', () => {
+    console.log('[WS /transcription] Client disconnected')
+  })
+
+  socket.on('error', (err) => {
+    console.error('[WS /transcription] Socket error:', err)
+  })
+})
+
 const PORT = process.env.PORT || 2999
-app.listen(PORT, () =>
+httpServer.listen(PORT, () =>
   console.log(`Server corriendo en http://localhost:${PORT}`)
 )

@@ -134,11 +134,21 @@ export function useAiEditor() {
 
     store.setPage(page)
 
-    // Send AI_PATCH to the runtime iframe for immediate live preview
     if (previewFrame.value?.contentWindow) {
+      // Send AI_PATCH to the runtime iframe for immediate live preview
       sendEditorMessage(
         previewFrame.value.contentWindow,
         { type: 'AI_PATCH', payload: page },
+        RUNTIME_ORIGIN
+      )
+
+      // Send AI_VOICE_RESPONSE so the runtime can forward it to the native layer for TTS.
+      // The web layer does NOT play audio — native Android/iOS handles speech synthesis.
+      // TODO: Native Android/iOS layer should listen for this message and invoke system TTS
+      //       (Android → TextToSpeech API, iOS → AVSpeechSynthesizer)
+      sendEditorMessage(
+        previewFrame.value.contentWindow,
+        { type: 'AI_VOICE_RESPONSE', payload: { text } },
         RUNTIME_ORIGIN
       )
     }

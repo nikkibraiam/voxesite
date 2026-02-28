@@ -119,6 +119,21 @@ onMounted(() => {
         styleVersion.value = Date.now()
       }
     }
+
+    if (event.data.type === 'AI_VOICE_RESPONSE') {
+      // The editor has finished an AI response and is signalling the native layer to speak it.
+      // The runtime forwards this message to its parent (the native WebView container).
+      // No audio playback happens in the web layer.
+      //
+      // TODO: Android → use TextToSpeech API. iOS → use AVSpeechSynthesizer.
+      //       The native layer should listen for postMessage events of type AI_VOICE_RESPONSE
+      //       on the WebView and invoke the system TTS with event.data.payload.text.
+      console.log('[runtime] AI_VOICE_RESPONSE — forwarding to native layer:', event.data.payload.text)
+      if (window.parent && window.parent !== window) {
+        // Forward to the native app container sitting above the editor iframe stack
+        window.parent.postMessage(event.data, '*')
+      }
+    }
   })
 })
 </script>
