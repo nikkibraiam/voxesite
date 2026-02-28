@@ -23,20 +23,27 @@ voxesiteeditor/
 | File | Role |
 |---|---|
 | `packages/contracts/page.ts` | ✅ Core types: `Page`, `BaseBlock`, `Site`, `SiteLayout`, `SiteVersion`, `LayoutBlock`, `GridDefinition` |
+| `packages/contracts/blocks/header.ts` | ✅ `HeaderProps`, `HeaderNavLink`, `HeaderBlock` — layout header types |
+| `packages/contracts/blocks/footer.ts` | ✅ `FooterProps`, `FooterColumn`, `FooterLink`, `FooterBlock` — layout footer types |
 | `packages/contracts/messages.ts` | ✅ Typed postMessage protocol: `EditorMessage`, `sendEditorMessage`, `isEditorMessage` |
-| `packages/ui/renderer/renderComponent.ts` | Maps JSON blocks → Vue components via `h()` |
-| `packages/ui/schemas/` | Block schemas (drives editor forms dynamically) |
+| `packages/ui/renderer/renderComponent.ts` | ✅ Maps JSON blocks → Vue components via `h()`; exports `renderBlock`, `renderLayoutBlock`, `renderLayoutHeader`, `renderLayoutFooter` |
+| `packages/ui/schemas/index.ts` | ✅ `BlockSchemas` (Hero, TextBlock) + `LayoutSchemas` (LayoutHeader, LayoutFooter) registries |
+| `packages/ui/schemas/blocks/` | Block schemas for page blocks (hero, text) |
+| `packages/ui/schemas/layout/` | ✅ Layout block schemas: `header.schema.ts`, `footer.schema.ts` |
+| `packages/ui/components/LayoutHeader.vue` | ✅ Responsive header — logo, nav links, mobile hamburger menu |
+| `packages/ui/components/LayoutFooter.vue` | ✅ Responsive footer — column groups, copyright, auto text-contrast |
 | `packages/ui/wrappers/SelectableBlock.vue` | Click selection wrapper for blocks |
 | `packages/utils/css/generateBlockCss.ts` | Generates scoped CSS from block styles |
-| `apps/editor/stores/usePageStore.ts` | ✅ Pinia store — root state is `site` + `currentPageId`; `page` is a backward-compat computed alias |
-| `apps/editor/composables/usePageEditor.ts` | ✅ Load/save full Site, semver publish, version history, iframe page-switch |
+| `apps/editor/stores/usePageStore.ts` | ✅ Pinia store — page state + layout state + dual undo/redo stacks |
+| `apps/editor/composables/usePageEditor.ts` | ✅ Load/save full Site, semver publish, iframe sync (page + layout), message listener |
+| `apps/editor/composables/useLayoutEditor.ts` | ✅ Layout tab mode — `isLayoutMode`, `activateLayoutMode`, `activatePage`, `addOrSelectHeader/Footer` |
 | `apps/editor/composables/useBlockSelection.ts` | ✅ Block selection wrapper |
 | `apps/editor/composables/useDragDrop.ts` | ✅ Placeholder — ready for Vue Draggable Plus |
-| `apps/editor/pages/index.vue` | ✅ Thin component — page tabs, `+ Página` button, dynamic iframe src |
+| `apps/editor/pages/index.vue` | ✅ Thin component — Layout tab + page tabs + `+ Página` button + iframe |
 | `apps/editor/server/api/site.get.ts` | ✅ `GET /api/site` — proxies to build server, triggers migration on first load |
 | `apps/editor/server/api/save.post.ts` | ✅ `POST /api/save` — accepts full `Site`, generates per-page CSS |
-| `apps/editor/modals/BlockEditorModal.vue` | Block property editor (consumes usePageStore — unchanged) |
-| `apps/runtime/pages/[slug].vue` | ✅ Renders blocks from JSON, uses typed messages |
+| `apps/editor/modals/BlockEditorModal.vue` | ✅ Block/layout property editor — handles both page blocks and layout blocks |
+| `apps/runtime/pages/[slug].vue` | ✅ Renders header + page blocks + footer from site JSON, uses typed messages |
 | `node-build-server/src/readSiteFull.ts` | ✅ Read `site.json`; auto-migrates from `data/pages/*.json` on first access |
 | `node-build-server/src/saveSiteFull.ts` | ✅ Write `site.json` + explode per-page files + CSS |
 | `node-build-server/src/versionManager.ts` | ✅ `saveVersion`, `listVersions`, `rollbackVersion` |
@@ -49,7 +56,7 @@ voxesiteeditor/
 ```ts
 type BaseBlock<TType, TProps> = {
   id: string
-  type: TType           // "Hero" | "TextBlock"
+  type: TType           // "Hero" | "TextBlock" | "LayoutHeader" | "LayoutFooter"
   props: TProps
   styles?: BlockStyles  // { ".hero__title": { color: "#fff" } }
   customCss?: string
@@ -73,14 +80,26 @@ interface Site {
 }
 
 interface SiteLayout {
-  header?: LayoutBlock  // global nav/menu (placeholder — implemented in roadmap)
-  footer?: LayoutBlock
+  header?: LayoutBlock  // LayoutHeader block — rendered above every page
+  footer?: LayoutBlock  // LayoutFooter block — rendered below every page
   grids?: GridDefinition[]
 }
 
+// Layout block prop shapes (packages/contracts/blocks/)
+interface HeaderProps {
+  logoText?: string; logoImageUrl?: string; logoAlt?: string
+  navLinks?: HeaderNavLink[]  // [{ label, href }]
+  backgroundColor?: string; sticky?: boolean
+}
+
+interface FooterProps {
+  columns?: FooterColumn[]    // [{ title, links: [{ label, href }] }]
+  copyrightText?: string; backgroundColor?: string
+}
+
 interface SiteVersion {
-  version: string       // e.g. "1.2.0"
-  publishedAt: string   // ISO 8601
+  version: string       // semver e.g. "1.2.0"
+  publishedAt: string   // ISO 8601 string
 }
 ```
 
@@ -90,6 +109,8 @@ interface SiteVersion {
 - Each publish creates a versioned snapshot in `runtime_storage/{siteId}/versions/{version}/site.json`
 - `Page.title` is optional for backward compat — existing JSON without it still parses
 - CSS is scoped per block using `.block-{id}` prefix; generated per page on every save
+- Layout block props use **flat keys** (e.g. `logoText`, not `logo.text`) for simple form binding
+- `navLinks` and `columns` are edited as **JSON** in the editor form (type `'json'`); the components accept both arrays and JSON strings at runtime
 
 ---
 
@@ -99,13 +120,22 @@ All postMessage communication uses `sendEditorMessage()` from `@cms/contracts`. 
 
 ```ts
 type EditorMessage =
+  // Editor → Runtime
   | { type: 'PAGE_UPDATE'; payload: Page }
-  | { type: 'BLOCK_SELECT'; payload: { blockId: string | null } }
+  | { type: 'LAYOUT_UPDATE'; payload: SiteLayout }    // live layout preview
   | { type: 'AI_PATCH'; payload: Partial<Page> }
+  // Runtime → Editor
+  | { type: 'BLOCK_SELECT'; payload: { blockId: string | null } }
+  | { type: 'LAYOUT_BLOCK_SELECT'; payload: { slot: 'header' | 'footer' | null } }
+  // Future
   | { type: 'VOICE_INPUT'; payload: { audio: Blob } }
   | { type: 'VOICE_TRANSCRIPT'; payload: { text: string } }
   | { type: 'AI_VOICE_RESPONSE'; payload: { text: string; audio?: Blob } }
 ```
+
+**Message flow:**
+- `LAYOUT_UPDATE` is sent by `usePageEditor` whenever `store.site.layout` changes (deep watch) — runtime updates header/footer immediately without a page reload.
+- `LAYOUT_BLOCK_SELECT` is sent by the runtime when the user clicks on the header or footer area in the iframe — editor responds by calling `store.selectLayoutBlock(slot)`.
 
 ---
 
@@ -116,18 +146,22 @@ type EditorMessage =
 ### State
 - `site` — full Site JSON (root state)
 - `currentPageId` — ID of the page open in the editor canvas
-- `selectedBlockId` — currently selected block ID
+- `selectedBlockId` — currently selected page block ID (mutually exclusive with `selectedLayoutBlockId`)
+- `selectedLayoutBlockId` — `'header' | 'footer' | null` — currently selected layout slot
 - `history[]` — undo stack (Page snapshots, current page only, max 50)
 - `future[]` — redo stack (cleared on any new block mutation)
+- `layoutHistory[]` — undo stack for layout changes (SiteLayout snapshots, max 50)
+- `layoutFuture[]` — redo stack for layout changes
 
 ### Computed getters
 - `currentPage` — `site.pages.find(p => p.id === currentPageId)`
 - `page` — **backward-compat alias for `currentPage`** — all existing consumers read this unchanged
 - `selectedBlock` — block within `currentPage.blocks` matching `selectedBlockId`
-- `canUndo`, `canRedo`
+- `selectedLayoutBlock` — `site.layout.header` or `site.layout.footer` based on `selectedLayoutBlockId`
+- `canUndo`, `canRedo`, `canUndoLayout`, `canRedoLayout`
 
 ### Site actions
-- `setSite(site)` — loads full site, clears history, defaults `currentPageId` to first page
+- `setSite(site)` — loads full site, clears all history, defaults `currentPageId` to first page
 - `setCurrentPage(id)` — switches active page; **clears undo/redo history** (undo is per-page)
 - `addPage(page)` — appends page, switches to it
 - `removePage(id)` — removes page (guards: never removes last page); switches to previous sibling
@@ -136,14 +170,25 @@ type EditorMessage =
 - `addBlock(type)` — appends block with schema defaults, snapshots
 - `updateBlock(block, { snapshot })` — `snapshot: false` for live preview, `snapshot: true` for intentional commits
 - `removeBlock(id)` — removes block, snapshots
-- `selectBlock(id | null)` — sets selected block (no snapshot)
+- `selectBlock(id | null)` — sets selected page block; clears `selectedLayoutBlockId`
 - `undo()` / `redo()` — restore/replay `currentPage` snapshots via `_replacePage()`
 - `setPage(page)` — backward-compat; updates current page or bootstraps minimal site
+
+### Layout actions (operate on `site.layout`)
+- `updateLayout(layout, { snapshot })` — replaces entire `site.layout`
+- `updateHeader(block, { snapshot })` — replaces `site.layout.header`; same `snapshot` pattern
+- `updateFooter(block, { snapshot })` — replaces `site.layout.footer`
+- `addHeader()` — creates header from `HeaderSchema.defaultProps` if absent, then selects it
+- `addFooter()` — creates footer from `FooterSchema.defaultProps` if absent, then selects it
+- `removeHeader()` / `removeFooter()` — removes slot, snapshots layout
+- `selectLayoutBlock(slot | null)` — sets `selectedLayoutBlockId`; clears `selectedBlockId`
+- `undoLayout()` / `redoLayout()` — restore/replay `site.layout` from layout stacks
 
 ### Key design decisions
 - `page` is a computed (not a ref) — `BlockEditorModal` and `usePageEditor` watch it unchanged
 - `_replacePage(updated)` is the single mutation point for all block changes — keeps `site.pages` reactive
-- Undo history is cleared on `setCurrentPage()` — history is scoped to the current page session
+- `selectBlock` and `selectLayoutBlock` are mutually exclusive — selecting one clears the other
+- Layout undo/redo is **independent** from page undo/redo (separate stacks, separate buttons)
 - `savePage` and `publishSite` stay in `usePageEditor` as HTTP side effects, not in the store
 
 ---
@@ -168,6 +213,18 @@ type EditorMessage =
 - [x] **Rollback API** — `POST /api/:siteId/rollback/:version` restores a snapshot and explodes per-page files
 - [x] **Auto-migration** — on first `GET /api/site`, `readSiteFull` wraps existing `data/pages/*.json` into `site.json` transparently
 - [x] **Build server** — new modules: `readSiteFull.ts`, `saveSiteFull.ts`, `versionManager.ts`; `GET/POST /site`, `/versions`, `/rollback` routes added to `server.ts`; `GET /page/:slug` still works (reads from `site.json` first)
+- [x] **Layout block types** — `HeaderProps`, `FooterProps` in `packages/contracts/blocks/`; `LayoutBlock = BaseBlock<string, any>` already in `page.ts`
+- [x] **Layout schemas** — `HeaderSchema` + `FooterSchema` in `packages/ui/schemas/layout/`; `LayoutSchemas` registry exported from `packages/ui/schemas/index.ts`
+- [x] **LayoutHeader component** — responsive header with logo (text or image), nav links, mobile hamburger menu, sticky support
+- [x] **LayoutFooter component** — responsive footer with column groups, copyright bar, automatic text-contrast based on background color
+- [x] **Renderer extended** — `LayoutHeader` + `LayoutFooter` registered; `renderLayoutBlock`, `renderLayoutHeader`, `renderLayoutFooter` exported from `packages/ui`
+- [x] **Layout store actions** — `updateHeader`, `updateFooter`, `updateLayout`, `addHeader`, `addFooter`, `removeHeader`, `removeFooter`, `selectLayoutBlock`, `undoLayout`, `redoLayout` — all with snapshot support
+- [x] **Dual undo/redo** — page and layout changes have independent history stacks (`layoutHistory`, `layoutFuture`, `canUndoLayout`, `canRedoLayout`)
+- [x] **Layout tab in editor** — `useLayoutEditor` composable manages `isLayoutMode`; `index.vue` shows Layout tab with add/edit/remove/undo controls for header and footer
+- [x] **LAYOUT_UPDATE message** — `usePageEditor` deep-watches `store.site.layout` and pushes changes to iframe in real-time
+- [x] **LAYOUT_BLOCK_SELECT message** — runtime sends slot name when header/footer clicked; `usePageEditor` routes to `store.selectLayoutBlock(slot)`
+- [x] **Runtime layout rendering** — `[slug].vue` fetches full site (`GET /api/demosite/site`), renders `LayoutHeader` above and `LayoutFooter` below page blocks; layout blocks are `SelectableBlock`-wrapped in editor mode
+- [x] **BlockEditorModal extended** — handles both page blocks and layout blocks; `draftContext` tracks which; dispatches to correct store action; supports `'boolean'`, `'color'`, and `'json'` field types in addition to `'string'` and `'css'`
 
 ---
 
@@ -176,11 +233,9 @@ type EditorMessage =
 ### 1. ✅ Multi-Page Site Model — COMPLETE
 All sub-tasks done. `Site` model implemented, multi-page store, page tabs, site-level save/publish, version snapshots, rollback API, auto-migration.
 
-### 2. Layouts, Header, Footer, Grids
-- New block category: `LayoutBlock` — shared across all pages (header, footer, nav menu)
-- Responsive grid system: define grid areas in `SiteLayout.grids[]`
-- The renderer must wrap page blocks inside the active layout
-- Schemas needed for layout blocks (same schema-driven pattern as page blocks)
+### 2. ✅ Layouts, Header, Footer, Grids — COMPLETE
+All sub-tasks done. `LayoutHeader` + `LayoutFooter` block types, schemas, components, renderer integration, store actions with undo/redo, Layout tab in editor, live LAYOUT_UPDATE preview, LAYOUT_BLOCK_SELECT click-to-edit from runtime.
+- Pending: **Grid system** (`SiteLayout.grids[]`) — type placeholder exists, UI and renderer integration not yet built
 
 ### 3. Drag & Drop Editor
 - Use `Vue Draggable Plus` (wraps SortableJS)
@@ -274,16 +329,20 @@ Implications:
 - All page/site state mutations go through `usePageStore` — never mutate state directly in components
 - All postMessage communication uses `sendEditorMessage()` from `@cms/contracts` — never raw `postMessage`
 - All new editor logic goes into composables in `apps/editor/composables/` — never directly in components
-- New block types require: schema in `packages/ui/schemas/`, component in `packages/ui/components/`, type in `packages/contracts/`
+- **New page block types** require: type in `packages/contracts/blocks/`, schema in `packages/ui/schemas/blocks/`, component in `packages/ui/components/`, entry in `BlockSchemas` registry, entry in renderer registry
+- **New layout block types** require: type in `packages/contracts/blocks/`, schema in `packages/ui/schemas/layout/`, component in `packages/ui/components/`, entry in `LayoutSchemas` registry, entry in renderer registry
 - CSS is always generated via `generateBlockCss.ts` — never write block styles inline
 - All LLM calls go through the `LLMAdapter` interface — never call LLM APIs directly from components
+- Layout block props use **flat keys** (no nested objects) so `BlockEditorModal` can bind them with `draft.props[field.key]` directly
+- Complex array props (`navLinks`, `columns`) use `type: 'json'` in the schema — the component must accept both Array and JSON string at runtime
 
 ---
 
 ## Known Limitations (to address)
 - File system used as database — needs Postgres/MongoDB for multi-user and versioning
-- No single block registration point — adding blocks requires changes in 3 places
+- No single block registration point — adding blocks requires changes in 3–4 places
 - No CSP/nonce system yet
 - No collaborative editing support yet
 - Version rollback UI not yet built (API exists — `versionHistory` ref is available in `usePageEditor`)
 - `siteId` is hardcoded as `'demosite'` throughout — needs to become dynamic for multi-tenant SaaS
+- Grid system (`SiteLayout.grids[]`) type placeholder exists but UI and renderer integration pending

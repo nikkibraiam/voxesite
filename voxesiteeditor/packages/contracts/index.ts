@@ -1,4 +1,6 @@
 export * from './page'
 export * from './blocks/hero'
 export * from './blocks/text'
+export * from './blocks/header'
+export * from './blocks/footer'
 export * from './messages'

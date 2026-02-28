@@ -1,1 +1,1 @@
-export { renderBlock } from './renderer/renderComponent'
+export { renderBlock, renderLayoutBlock, renderLayoutHeader, renderLayoutFooter } from './renderer/renderComponent'

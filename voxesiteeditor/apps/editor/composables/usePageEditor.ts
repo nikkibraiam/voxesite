@@ -22,7 +22,7 @@ export function usePageEditor() {
   /** Published version snapshots fetched from the build server. */
   const versionHistory = ref<SiteVersion[]>([])
 
-  // ─── Live preview sync ──────────────────────────────────────────────────────
+  // ─── Live preview sync (page) ────────────────────────────────────────────────
   // store.page is a computed alias for currentPage. Deep-watching it fires on
   // every block mutation (edit, undo, redo, add block) — same as before.
   watch(
@@ -32,6 +32,22 @@ export function usePageEditor() {
       sendEditorMessage(
         previewFrame.value.contentWindow,
         { type: 'PAGE_UPDATE', payload: structuredClone(toRaw(newPage)) },
+        RUNTIME_ORIGIN
+      )
+    },
+    { deep: true }
+  )
+
+  // ─── Live preview sync (layout) ──────────────────────────────────────────────
+  // Deep-watch site.layout so any header/footer change immediately reflects in
+  // the runtime iframe without requiring a save.
+  watch(
+    () => store.site?.layout,
+    (newLayout) => {
+      if (!newLayout || !previewFrame.value?.contentWindow) return
+      sendEditorMessage(
+        previewFrame.value.contentWindow,
+        { type: 'LAYOUT_UPDATE', payload: structuredClone(toRaw(newLayout)) },
         RUNTIME_ORIGIN
       )
     },
@@ -126,8 +142,17 @@ export function usePageEditor() {
     // Listen for typed messages from the runtime iframe
     window.addEventListener('message', (event) => {
       if (!isEditorMessage(event.data)) return
+
       if (event.data.type === 'BLOCK_SELECT') {
+        // A page block was clicked — clear any layout selection
+        store.selectLayoutBlock(null)
         store.selectBlock(event.data.payload.blockId)
+      }
+
+      if (event.data.type === 'LAYOUT_BLOCK_SELECT') {
+        // A layout block (header/footer) was clicked — clear page block selection
+        store.selectBlock(null)
+        store.selectLayoutBlock(event.data.payload.slot)
       }
     })
   })
