@@ -398,12 +398,11 @@ Implications:
 ---
 
 ## Known Limitations (to address)
-- File system used as database — needs Postgres/MongoDB for multi-user and versioning
+- Postgres is now primary storage (added in Feature #9) with filesystem fallback — single-tenant only; `DATABASE_URL` env var required for persistence across restarts
 - No single block registration point — adding blocks requires changes in 3–4 places
-- No CSP/nonce system yet
-- No collaborative editing support yet
 - Version rollback UI not yet built (API exists — `versionHistory` ref is available in `usePageEditor`)
 - `siteId` is hardcoded as `'demosite'` throughout — needs to become dynamic for multi-tenant SaaS
 - Grid system (`SiteLayout.grids[]`) type placeholder exists but UI and renderer integration pending
 - Screenshot/URL page generation requires a vision-capable model (gpt-4o, claude-opus-4-6, llava, moondream); text-only models can only use the HTML flow
 - Puppeteer Chromium is downloaded to `~/.cache/puppeteer/` — requires ~300MB disk space; use `puppeteer-core` + system Chrome if disk is constrained
+- Native Android/iOS TTS integration pending — `AI_VOICE_RESPONSE` postMessage is dispatched by the editor but native layer TTS hookup (`TextToSpeech` / `AVSpeechSynthesizer`) not yet implemented
