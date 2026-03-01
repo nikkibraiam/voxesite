@@ -1,13 +1,15 @@
-import { h, defineAsyncComponent } from 'vue'
+import { h } from 'vue'
 import type { VNode } from 'vue'
 import type { BaseBlock, Site, SiteLayout, LayoutBlock } from '@cms/contracts'
+import { BlockRegistry } from '../blocks/manifest'
 
-const registry: Record<string, ReturnType<typeof defineAsyncComponent>> = {
-  TextBlock: defineAsyncComponent(() => import('../components/TextBlock.vue')),
-  Hero: defineAsyncComponent(() => import('../components/Hero.vue')),
-  FormBlock: defineAsyncComponent(() => import('../components/FormBlock.vue')),
-  LayoutHeader: defineAsyncComponent(() => import('../components/LayoutHeader.vue')),
-  LayoutFooter: defineAsyncComponent(() => import('../components/LayoutFooter.vue'))
+// ── Layout block components (not in the page-block manifest) ─────────────────
+import LayoutHeaderComponent from '../components/LayoutHeader.vue'
+import LayoutFooterComponent from '../components/LayoutFooter.vue'
+
+const layoutRegistry: Record<string, any> = {
+  LayoutHeader: LayoutHeaderComponent,
+  LayoutFooter: LayoutFooterComponent
 }
 
 export interface RenderOptions {
@@ -73,8 +75,8 @@ export function renderBlock(block: BaseBlock<string, any>, options: RenderOption
     )
   }
 
-  // ── Standard registry lookup ─────────────────────────────────────────────────
-  const Component = registry[block.type]
+  // ── Standard registry lookup (manifest-driven) ───────────────────────────────
+  const Component = BlockRegistry[block.type] ?? layoutRegistry[block.type]
 
   if (!Component) {
     console.warn(`Block type "${block.type}" not registered`)

@@ -28,9 +28,11 @@ voxesiteeditor/
 | `packages/contracts/blocks/composite.ts` | ✅ `CompositeBlockDefinition`, `CompositeBlockProps` — composite block types |
 | `packages/contracts/messages.ts` | ✅ Typed postMessage protocol: `EditorMessage`, `sendEditorMessage`, `isEditorMessage` |
 | `packages/ui/renderer/renderComponent.ts` | ✅ Maps JSON blocks → Vue components via `h()`; exports `renderBlock`, `renderLayoutBlock`, `renderLayoutHeader`, `renderLayoutFooter` |
-| `packages/ui/schemas/index.ts` | ✅ `BlockSchemas` (Hero, TextBlock) + `LayoutSchemas` (LayoutHeader, LayoutFooter) registries |
-| `packages/ui/schemas/blocks/` | Block schemas for page blocks (hero, text, composite) |
-| `packages/ui/schemas/blocks/composite.schema.ts` | ✅ `CompositeSchema` — registered in `BlockSchemas` registry |
+| `packages/ui/blocks/defineBlock.ts` | ✅ `BlockManifestEntry` interface + `defineBlockManifest()` helper — type definitions for manifest entries |
+| `packages/ui/blocks/manifest.ts` | ✅ **Single registration point** for all page blocks — `BlockManifest` array + `BlockRegistry` map auto-derived from it |
+| `packages/ui/schemas/index.ts` | ✅ `BlockSchemas` auto-derived from `BlockManifest`; `LayoutSchemas` (LayoutHeader, LayoutFooter) defined separately |
+| `packages/ui/schemas/blocks/` | Block schemas for page blocks (hero, text, composite + 8 Tier 1 blocks) |
+| `packages/ui/schemas/blocks/composite.schema.ts` | ✅ `CompositeSchema` — special-cased in `BlockSchemas` (not in manifest; resolved inline in renderer) |
 | `packages/ui/schemas/layout/` | ✅ Layout block schemas: `header.schema.ts`, `footer.schema.ts` |
 | `packages/ui/components/LayoutHeader.vue` | ✅ Responsive header — logo, nav links, mobile hamburger menu |
 | `packages/ui/components/LayoutFooter.vue` | ✅ Responsive footer — column groups, copyright, auto text-contrast |
@@ -283,6 +285,7 @@ type EditorMessage =
 - [x] **Voice Input + Text-to-Voice hook** — WebSocket transcription server (`ws` package) on `/transcription` path sharing port 2999; `TranscriptionAdapter` interface with `WhisperAdapter` (POST /asr multipart, faster-whisper / whisper.cpp compatible) and `MockWhisperAdapter` (dev fallback when `WHISPER_BASE_URL` unset); WS protocol: `VOICE_CHUNK` / `VOICE_END` client→server, `TRANSCRIPT_TOKEN` / `TRANSCRIPT_DONE` / `TRANSCRIPT_ERROR` server→client; `useVoiceInput()` composable — listens for `VOICE_INPUT` postMessages from native layer, forwards audio chunks via WS, accumulates `liveTranscript` ref, populates `aiPrompt` on completion; mic button in `AiPromptPanel` (44×44 px, pulsing red ring while listening, ghost placeholder text shows live transcript); `AI_VOICE_RESPONSE` postMessage sent by `useAiEditor` after SSE completes — forwarded by runtime to native container for TTS (no web audio playback); env vars: `WHISPER_BASE_URL`, `NUXT_PUBLIC_WS_URL`; native TTS integration pending (separate phase — see Android/iOS TODO comments)
 - [x] **Collaborative Editing** — Yjs CRDT sync via y-websocket; PostgreSQL persistence (`sites` + `site_versions` tables, JSONB + collab_state BYTEA); `setupCollaborationServer` on port 2999 (`/collaboration/*` path, noServer WebSocket routing alongside `/transcription`); `useCollaboration()` composable — bidirectional Pinia ↔ Y.Map sync (100 ms debounce, `_suppressSync` flag + `nextTick` loop prevention); presence via y-websocket awareness protocol; `UserPresence` type + `presenceColorFromId()` in `@cms/contracts`; `PresenceBar.vue` — avatar circles (HSL color, initials, pulsing ring on active edit, +N overflow, "you" chip); `PRESENCE_UPDATE` EditorMessage for editor→runtime iframe; `SelectableBlock` peer prop — 3 px HSL left border with CSS transition; runtime `peerMap` tracking presence per block; `useBlockSelection` non-blocking conflict warning toast (3 s auto-dismiss); 6 unit tests (node:test) covering color determinism, two-client sync, concurrent merge, encoding round-trip; env var: `DATABASE_URL`; node-build-server tsconfig upgraded to `moduleResolution: "bundler"` for sub-path exports
 - [x] **Composite Block (Custom Components as Composition)** — Multi-select blocks in sidebar via `useCompositeBlocks()` composable + "⊞ Seleccionar múltiples" toggle; group into a named `CompositeBlockDefinition` stored in `site.customComponents[]`; `createCompositeBlock`, `updateCompositeDefinition`, `deleteCompositeDefinition`, `updateCompositeOverride`, `replaceBlockWithChildren` store actions (all with snapshot/undo); recursive renderer resolution in `renderBlock()` (Composite handled before registry lookup, passes `site` via `RenderOptions`); `BlockEditorPanel` composite mode — tree list of child blocks, click-to-edit overrides with per-child Tweakpane inspector, "Desagrupar" button (44×44 px); missing-definition placeholder (red dashed border); right-click context menu "Desagrupar" on composite items in sidebar; named-component dialog (Escape to cancel, Enter to confirm); `CompositeSchema` registered in `BlockSchemas`; runtime `[slug].vue` passes `site` ref to all `renderBlock` calls; 12 new unit tests in `composite.test.ts` (38 total passing)
+- [x] **Block Manifest + Tier 1 Component Library** — `packages/ui/blocks/manifest.ts` is now the **single registration point** for all page blocks; adding a block requires only one file change; `BlockRegistry` map auto-derived; `BlockSchemas` in `schemas/index.ts` auto-derived from manifest; `renderComponent.ts` registry driven by manifest; 8 Tier 1 blocks implemented: `CardGrid`, `ImageGallery`, `CTABanner`, `Testimonials`, `Features`, `PricingTable`, `FAQ`, `ContactInfo`; all blocks responsive (mobile-first), touch-friendly (44×44 px targets), CSP-compliant (`nonce` prop), with JSON-string array prop acceptance; 18 new unit tests in `blocks.test.ts` (56 total passing)
 
 ---
 
@@ -414,9 +417,30 @@ All sub-tasks done. `LayoutHeader` + `LayoutFooter` block types, schemas, compon
 - ✅ `ENDPOINT_ENCRYPTION_KEY` documented in `node-build-server/.env`
 - Pending: Form Endpoints settings panel UI in editor (CRUD modal — `useFormEndpoints` composable is ready, panel component not yet built)
 
-### 14. Full Component Library — Pending
-- Pending: Block Manifest pattern (`packages/ui/blocks/manifest.ts`) — single registration point
-- Pending: Tier 1 (8 blocks): `CardGrid`, `ImageGallery`, `CTABanner`, `Testimonials`, `Features`, `PricingTable`, `FAQ`, `ContactInfo`
+### 14. ✅ Full Component Library — Tier 1 COMPLETE
+
+#### Block Manifest pattern — COMPLETE
+- ✅ `packages/ui/blocks/defineBlock.ts` — `BlockManifestEntry` interface + `defineBlockManifest()` helper
+- ✅ `packages/ui/blocks/manifest.ts` — single registration point; `BlockManifest` array drives all downstream registries; `BlockRegistry` map for O(1) renderer lookup
+- ✅ `packages/ui/schemas/index.ts` — `BlockSchemas` auto-derived from `BlockManifest` via `Object.fromEntries()`; Composite special-cased outside manifest
+- ✅ `packages/ui/renderer/renderComponent.ts` — `registry` replaced by `BlockRegistry` from manifest; layout components (LayoutHeader, LayoutFooter) kept in separate `layoutRegistry`
+- ✅ `apps/editor/pages/index.vue` — "Add block" buttons iterate `BlockSchemas` (unchanged); automatically picks up new blocks via manifest
+
+#### Tier 1 blocks — COMPLETE
+- ✅ `CardGrid` — responsive card grid, configurable columns, image+title+text+CTA per card, JSON array prop
+- ✅ `ImageGallery` — grid/masonry layouts, lightbox with prev/next keyboard navigation, lazy loading
+- ✅ `CTABanner` — full-width call-to-action, configurable bg/text colors, 44×44 px button
+- ✅ `Testimonials` — grid or carousel layout, star ratings, avatar support, dot navigation
+- ✅ `Features` — icon+title+description grid, configurable columns
+- ✅ `PricingTable` — plan cards, highlighted plan, feature checklist, CTA per plan
+- ✅ `FAQ` — accordion, single/multiple open mode, smooth collapse, 44×44 px touch targets
+- ✅ `ContactInfo` — email/phone/address links, Google Maps iframe embed, responsive 2-col layout
+- ✅ All 8 blocks: TypeScript types in `packages/contracts/blocks/`, schemas in `packages/ui/schemas/blocks/`, Vue SFCs in `packages/ui/components/`
+- ✅ All blocks registered via manifest only — no manual changes to renderer, schemas, or editor needed
+- ✅ All blocks responsive (mobile-first), touch-friendly, CSP-compliant (`nonce` prop), defensively parse JSON string OR Array at runtime
+- ✅ 18 unit tests in `node-build-server/src/__tests__/blocks.test.ts` — defensive JSON parsing (5), FAQ state machine (5), carousel index wrapping (4), schema structure validation (4); **56 total tests passing**
+
+#### Pending
 - Pending: Tier 2 (8 blocks): `Flyer`, `VideoEmbed`, `Countdown`, `StatsBanner`, `TeamSection`, `LogoCloud`, `Timeline`, `Breadcrumb`
 - Pending: Tier 3 (16 blocks): `ProductCard`, `ProductGrid`, `ProductDetail`, `MapEmbed`, `NewsletterSignup`, `SearchBar`, `Accordion`, `Tabs`, `Carousel`, `Table`, `CodeBlock`, `Divider`, `Spacer`, `Alert`, `ProgressBar`
 
@@ -459,7 +483,7 @@ Implications:
 - All page/site state mutations go through `usePageStore` — never mutate state directly in components
 - All postMessage communication uses `sendEditorMessage()` from `@cms/contracts` — never raw `postMessage`
 - All new editor logic goes into composables in `apps/editor/composables/` — never directly in components
-- **New page block types** require: type in `packages/contracts/blocks/`, schema in `packages/ui/schemas/blocks/`, component in `packages/ui/components/`, entry in `BlockSchemas` registry, entry in renderer registry
+- **New page block types** require: type in `packages/contracts/blocks/`, schema in `packages/ui/schemas/blocks/`, component in `packages/ui/components/`, **one entry in `packages/ui/blocks/manifest.ts`** — that's it; `BlockSchemas` and renderer registry derive automatically
 - **New layout block types** require: type in `packages/contracts/blocks/`, schema in `packages/ui/schemas/layout/`, component in `packages/ui/components/`, entry in `LayoutSchemas` registry, entry in renderer registry
 - CSS is always generated via `generateBlockCss.ts` — never write block styles inline
 - All LLM calls go through the `LLMAdapter` interface — never call LLM APIs directly from components
@@ -472,7 +496,6 @@ Implications:
 
 ## Known Limitations (to address)
 - Postgres is now primary storage (added in Feature #9) with filesystem fallback — single-tenant only; `DATABASE_URL` env var required for persistence across restarts
-- No single block registration point — adding blocks requires changes in 3–4 places
 - Version rollback UI not yet built (API exists — `versionHistory` ref is available in `usePageEditor`)
 - `siteId` is hardcoded as `'demosite'` throughout — needs to become dynamic for multi-tenant SaaS
 - Grid system (`SiteLayout.grids[]`) type placeholder exists but UI and renderer integration pending

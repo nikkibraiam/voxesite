@@ -1,46 +1,36 @@
-import { HeroSchema } from './blocks/hero.schema'
-import { TextBlockSchema } from './blocks/text.schema'
+import { BlockManifest } from '../blocks/manifest'
 import { CompositeSchema } from './blocks/composite.schema'
-import { FormSchema } from './blocks/form.schema'
 import { HeaderSchema } from './layout/header.schema'
 import { FooterSchema } from './layout/footer.schema'
-
 import { ColorStylesSchema } from './styles/colors.schema'
-import { TypographyStylesSchema } from './styles/typography.schema'
-import { SpacingStylesSchema } from './styles/spacing.schema'
 
+/**
+ * BlockSchemas — auto-derived from BlockManifest.
+ * Adding an entry to manifest.ts automatically registers it here.
+ *
+ * The Composite type is special-cased: it is resolved inline in renderBlock()
+ * and does not appear in the "Add block" menu, but still needs an editor schema
+ * so BlockEditorPanel can display its inspector.
+ */
 export const BlockSchemas: Record<string, any> = {
-  Hero: {
-    content: HeroSchema,
-    styles: [
-      ColorStylesSchema,
-      TypographyStylesSchema,
-      SpacingStylesSchema
-    ]
-  },
-
-  TextBlock: {
-    content: TextBlockSchema,
-    styles: [
-      ColorStylesSchema,
-      TypographyStylesSchema
-    ]
-  },
-
+  ...Object.fromEntries(
+    BlockManifest.map(entry => [
+      entry.type,
+      {
+        content: entry.schema,
+        styles: entry.styleSchemas ?? []
+      }
+    ])
+  ),
   Composite: {
     content: CompositeSchema,
     styles: []
-  },
-
-  FormBlock: {
-    content: FormSchema,
-    styles: [ColorStylesSchema, SpacingStylesSchema]
   }
 }
 
 /**
  * Schema registry for layout blocks (header, footer).
- * Same shape as BlockSchemas so BlockEditorModal can consume both interchangeably.
+ * Same shape as BlockSchemas so BlockEditorPanel can consume both interchangeably.
  */
 export const LayoutSchemas: Record<string, any> = {
   LayoutHeader: {
