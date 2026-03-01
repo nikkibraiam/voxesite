@@ -17,6 +17,47 @@ try {
 
 export default defineNuxtConfig({
   ssr: true,
+
+  // ── CSP nonce injection via render:html hook ─────────────────────────────
+  //
+  // The CSP middleware (server/middleware/csp.ts) generates a nonce per request
+  // and stores it on event.context.cspNonce.  This hook reads that nonce and
+  // injects nonce="..." onto every <script> and <style> tag emitted by Nuxt
+  // (including hydration scripts, inline styles, etc.) so they pass CSP checks.
+  //
+  // Without this hook, Nuxt's own hydration <script> blocks would be blocked by
+  // the strict script-src 'nonce-xxx' policy.
+  hooks: {
+    'render:html'(html, { event }) {
+      const nonce: string | undefined = (event as any)?.context?.cspNonce
+      if (!nonce) return
+
+      /**
+       * Inject nonce="..." into the opening tag of every <script> and <style>
+       * that does not already carry a nonce attribute.
+       *
+       * Matches:
+       *   <script>                    → <script nonce="abc">
+       *   <script type="module">      → <script nonce="abc" type="module">
+       *   <style>                     → <style nonce="abc">
+       *   <script nonce="existing">   → unchanged
+       */
+      const injectNonce = (fragment: string): string =>
+        fragment.replace(
+          /<(script|style)(\s[^>]*)?>/gi,
+          (_match: string, tag: string, attrs: string = '') => {
+            if (/\bnonce=/i.test(attrs)) return `<${tag}${attrs}>`
+            return `<${tag} nonce="${nonce}"${attrs}>`
+          }
+        )
+
+      html.head = html.head.map(injectNonce)
+      html.bodyPrepend = html.bodyPrepend.map(injectNonce)
+      html.body = html.body.map(injectNonce)
+      html.bodyAppend = html.bodyAppend.map(injectNonce)
+    },
+  },
+
   nitro: {
     output: {
       publicDir: `public_builds/${siteId}`, // build aislado por siteId

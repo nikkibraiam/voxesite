@@ -25,6 +25,21 @@ const page = ref<Page | null>(
 
 const layout = ref<SiteLayout>(siteData?.layout ?? {})
 
+// ─── CSP nonce ───────────────────────────────────────────────────────────────
+// The nonce is generated per-request by server/middleware/csp.ts and stored on
+// event.context.cspNonce.  useCspNonce() reads it on the server; on the client
+// it falls back to the <meta name="csp-nonce"> tag injected below.
+// It is applied to dynamically created <style> elements so they pass CSP checks.
+const cspNonce = useCspNonce()
+
+// Inject nonce into <meta name="csp-nonce"> so client-side code can read it
+// after hydration (e.g. when regenerateStyles() runs in response to editor messages).
+useHead({
+  meta: cspNonce
+    ? [{ name: 'csp-nonce', content: cspNonce }]
+    : [],
+})
+
 // ─── Editor detection ────────────────────────────────────────────────────────
 const isEditor = ref(false)
 
@@ -41,23 +56,29 @@ function peerForBlock(blockId: string): { color: string; displayName: string } |
 // ─── Dynamic CSS ─────────────────────────────────────────────────────────────
 const dynamicStyleTag = ref<HTMLStyleElement | null>(null)
 
-function generatePageCss(page: Page) {
+function generatePageCss(p: Page) {
   let css = ''
-  for (const block of page.blocks) {
+  for (const block of p.blocks) {
     css += generateBlockCss(block)
   }
   return css
 }
 
-function regenerateStyles(page: Page) {
-  const css = generatePageCss(page)
+function regenerateStyles(p: Page) {
+  const css = generatePageCss(p)
 
   if (!dynamicStyleTag.value) {
     dynamicStyleTag.value = document.createElement('style')
+    // Attach the CSP nonce so the browser allows this dynamically injected style.
+    // Client-side we read it from <meta name="csp-nonce"> via useCspNonce().
+    const nonce = useCspNonce()
+    if (nonce) {
+      dynamicStyleTag.value.nonce = nonce
+    }
     document.head.appendChild(dynamicStyleTag.value)
   }
 
-  dynamicStyleTag.value.innerHTML = css
+  dynamicStyleTag.value.textContent = css
 }
 
 const styleVersion = ref(Date.now())

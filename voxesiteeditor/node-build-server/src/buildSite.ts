@@ -2,30 +2,37 @@ import { exec } from 'child_process'
 import path from 'path'
 import fs from 'fs-extra'
 import crypto from 'crypto'
+import { generateNonce, buildCspHeader } from './security/nonceGenerator'
 
 // Hash corto del contenido para cache busting (8 chars de SHA-256)
 function contentHash(content: string): string {
   return crypto.createHash('sha256').update(content).digest('hex').slice(0, 8)
 }
 
-// Hash SHA-256 en base64 para CSP (formato: sha256-<base64>)
-function sha256Base64(content: string): string {
-  return crypto.createHash('sha256').update(content).digest('base64')
+/**
+ * Inject `nonce="{nonce}"` into every <script> and <style> opening tag
+ * that does not already carry a nonce attribute.
+ *
+ * Handles tags with and without existing attributes, e.g.:
+ *   <script>            → <script nonce="abc">
+ *   <style type="text/css">  → <style nonce="abc" type="text/css">
+ */
+function injectNoncesIntoHtml(html: string, nonce: string): string {
+  return html.replace(/<(script|style)(\s[^>]*)?>/gi, (_match, tag: string, attrs: string = '') => {
+    if (/\bnonce=/i.test(attrs)) return `<${tag}${attrs}>` // already has nonce
+    return `<${tag} nonce="${nonce}"${attrs}>`
+  })
 }
 
-// Extrae todos los bloques <style>...</style> e <script>...</script> inline del HTML
-function extractInlineBlocks(html: string): { styles: string[], scripts: string[] } {
-  const styles: string[] = []
-  const scripts: string[] = []
-
-  for (const match of html.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/gi)) {
-    if (match[1].trim()) styles.push(match[1])
-  }
-  for (const match of html.matchAll(/<script(?![^>]*\bsrc\b)[^>]*>([\s\S]*?)<\/script>/gi)) {
-    if (match[1].trim()) scripts.push(match[1])
-  }
-
-  return { styles, scripts }
+/**
+ * Inject a fallback <meta http-equiv="Content-Security-Policy"> tag into <head>.
+ * The HTTP header is the primary delivery; this is a browser-fallback for
+ * static hosts that cannot set custom headers.
+ */
+function injectMetaCsp(html: string, csp: string): string {
+  const escapedCsp = csp.replace(/"/g, '&quot;')
+  const metaTag = `  <meta http-equiv="Content-Security-Policy" content="${escapedCsp}">`
+  return html.replace(/(<\/head>)/i, `${metaTag}\n$1`)
 }
 
 export async function buildSite(siteId: string) {
@@ -59,9 +66,8 @@ export async function buildSite(siteId: string) {
         await fs.copy(nuxtOutputDir, finalBuildDir)
 
         // Copiar CSS con nombre hasheado para cache busting
-        // Ejemplo: home.css → home.a3f9c1d2.css
         const generatedCssSource = path.join(runtimeStorageSite, 'generated-css')
-        const cssHashMap: Record<string, string> = {} // slug → nombre de archivo hasheado
+        const cssHashMap: Record<string, string> = {} // slug → hashed css file name
 
         if (await fs.pathExists(generatedCssSource)) {
           const cssFiles = await fs.readdir(generatedCssSource)
@@ -79,9 +85,26 @@ export async function buildSite(siteId: string) {
           }
         }
 
-        // Post-procesar cada HTML de página
-        const allCspStyleHashes = new Set<string>()
-        const allCspScriptHashes = new Set<string>()
+        // ─── Post-process HTML: inject CSP nonces ────────────────────────────
+        //
+        // Each page HTML file gets a fresh cryptographic nonce.  The nonce is:
+        //   1. Injected as nonce="" attribute on every <script> and <style> tag
+        //   2. Written into a <meta http-equiv="Content-Security-Policy"> fallback
+        //   3. Saved to a {slug}.headers.json sidecar for Express / CDN pickup
+        //
+        // A {slug}.headers.json sidecar contains the full set of security headers
+        // for that page; the Express static-serving middleware reads it and sets
+        // them on every response for that slug.
+
+        const headersMap: Record<string, Record<string, string>> = {}
+        const netlifyPerPageRules: string[] = []
+
+        const sharedSecurityHeaders: Record<string, string> = {
+          'X-Content-Type-Options': 'nosniff',
+          'X-Frame-Options': 'DENY',
+          'Referrer-Policy': 'strict-origin-when-cross-origin',
+          'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+        }
 
         const entries = await fs.readdir(finalBuildDir)
         for (const entry of entries) {
@@ -89,11 +112,11 @@ export async function buildSite(siteId: string) {
           if (!(await fs.stat(entryPath)).isDirectory()) continue
 
           const indexHtml = path.join(entryPath, 'index.html')
-          if (!await fs.pathExists(indexHtml)) continue
+          if (!(await fs.pathExists(indexHtml))) continue
 
           let html = await fs.readFile(indexHtml, 'utf-8')
 
-          // Actualizar <link> del CSS al nombre hasheado
+          // Update <link> CSS reference to hashed filename
           const hashedCssName = cssHashMap[entry]
           if (hashedCssName) {
             html = html.replace(
@@ -102,31 +125,39 @@ export async function buildSite(siteId: string) {
             )
           }
 
-          // Calcular hashes CSP de estilos e scripts inline
-          const { styles, scripts } = extractInlineBlocks(html)
-          for (const style of styles) allCspStyleHashes.add(`'sha256-${sha256Base64(style)}'`)
-          for (const script of scripts) allCspScriptHashes.add(`'sha256-${sha256Base64(script)}'`)
+          // Generate a unique nonce for this HTML file
+          const nonce = generateNonce()
+          const csp = buildCspHeader(nonce, { context: 'published' })
+
+          // Inject nonce attributes and fallback meta tag
+          html = injectNoncesIntoHtml(html, nonce)
+          html = injectMetaCsp(html, csp)
 
           await fs.writeFile(indexHtml, html)
+
+          // Write sidecar headers file: {slug}.headers.json
+          const pageHeaders = { 'Content-Security-Policy': csp, ...sharedSecurityHeaders }
+          const headersFilePath = path.join(finalBuildDir, `${entry}.headers.json`)
+          await fs.writeFile(headersFilePath, JSON.stringify(pageHeaders, null, 2))
+
+          headersMap[entry] = pageHeaders
+
+          // Netlify/Cloudflare _headers per-page rule
+          const netlifyHeaderLines = Object.entries(pageHeaders)
+            .map(([k, v]) => `  ${k}: ${v}`)
+            .join('\n')
+          netlifyPerPageRules.push(`/${entry}/*\n${netlifyHeaderLines}`)
         }
 
-        // Generar _headers con la política CSP para el deploy
-        // Compatible con Netlify, Cloudflare Pages, etc.
-        const styleHashes = [...allCspStyleHashes].join(' ')
-        const scriptHashes = [...allCspScriptHashes].join(' ')
+        // Write _headers file (Netlify / Cloudflare Pages CDN format).
+        // Per-page rules (with nonce) appear first; shared fallback rule last.
+        const sharedHeaderLines = Object.entries(sharedSecurityHeaders)
+          .map(([k, v]) => `  ${k}: ${v}`)
+          .join('\n')
+        const netlifyHeaders =
+          netlifyPerPageRules.join('\n') + `\n/*\n${sharedHeaderLines}\n`
 
-        const cspHeader = [
-          `default-src 'self'`,
-          `script-src 'self' ${scriptHashes}`,
-          `style-src 'self' ${styleHashes}`,
-          `font-src 'self' data:`,
-          `img-src 'self' data:`,
-        ].join('; ')
-
-        await fs.writeFile(
-          path.join(finalBuildDir, '_headers'),
-          `/*\n  Content-Security-Policy: ${cspHeader}\n`
-        )
+        await fs.writeFile(path.join(finalBuildDir, '_headers'), netlifyHeaders)
 
         // Limpiar carpeta temporal del runtime public/
         await fs.remove(path.join(finalBuildDir, '_builds'))

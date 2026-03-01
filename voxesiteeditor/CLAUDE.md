@@ -62,6 +62,10 @@ voxesiteeditor/
 | `node-build-server/src/pageGenerator/htmlSanitizer.ts` | ✅ Server-side DOMPurify sanitisation + DOM text outline |
 | `node-build-server/src/pageGenerator/pageGeneratorService.ts` | ✅ Orchestrates LLM call — system prompt with schema context, JSON extraction, one-retry logic |
 | `node-build-server/src/__tests__/pageGenerator.test.ts` | ✅ Unit tests (node:test) — JSON parsing, markdown fence stripping, sanitiser, screenshot handler |
+| `node-build-server/src/security/nonceGenerator.ts` | ✅ `generateNonce()` (base64url) + `buildCspHeader(nonce, options)` — context-aware CSP builder |
+| `node-build-server/src/__tests__/csp.test.ts` | ✅ 8 unit tests for nonce generation + CSP header building |
+| `apps/runtime/server/middleware/csp.ts` | ✅ Nitro server middleware — generates nonce per request, sets CSP + security headers, stores nonce on `event.context.cspNonce` |
+| `apps/runtime/composables/useCspNonce.ts` | ✅ Returns CSP nonce from SSR context (server) or `<meta name="csp-nonce">` (client) |
 | `apps/editor/server/api/generate-url.post.ts` | ✅ `POST /api/generate-url` — proxy to build server, injects schema context, SSE streaming |
 | `apps/editor/server/api/generate-screenshot.post.ts` | ✅ `POST /api/generate-screenshot` — proxy with vision-model error forwarding |
 | `apps/editor/server/api/generate-html.post.ts` | ✅ `POST /api/generate-html` — proxy, no vision required |
@@ -334,11 +338,19 @@ All sub-tasks done. `LayoutHeader` + `LayoutFooter` block types, schemas, compon
 - ✅ **6 unit tests** in `node-build-server/src/__tests__/collaboration.test.ts` — color determinism, two-client sync, concurrent merge, encoding round-trip
 - ✅ **tsconfig fix** — `moduleResolution: "bundler"` (TS 5.0+) to resolve `y-protocols/sync`, `lib0/encoding` sub-path exports
 
-### 10. Content Security Policy (CSP)
-- All published pages must include CSP headers
-- JavaScript and CSS must use nonces (not `unsafe-inline`)
-- Nonce generation happens at `node-build-server` level during static generation
-- The renderer must inject nonces into `<script>` and `<style>` tags at build time
+### 10. ✅ Content Security Policy (CSP) — COMPLETE
+- ✅ **`nonceGenerator.ts`** — `generateNonce()` (base64url, 16 random bytes) + `buildCspHeader(nonce, options)` with context-aware `frame-ancestors` in `node-build-server/src/security/nonceGenerator.ts`
+- ✅ **Static export nonce injection** — `buildSite.ts` generates a fresh nonce per HTML file, injects `nonce="..."` on all `<script>` and `<style>` tags, adds a fallback `<meta http-equiv="Content-Security-Policy">` tag, writes per-slug `{slug}.headers.json` sidecar and a `_headers` file (Netlify/Cloudflare format)
+- ✅ **Express security headers** — global middleware in `server.ts` sets `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy` on every response; `/sites/:siteId/pages/:slug` reads `{slug}.headers.json` and sets `Content-Security-Policy`
+- ✅ **SSR runtime middleware** — `apps/runtime/server/middleware/csp.ts` generates nonce per request, detects editor mode (`?editor=1` or Referer localhost:3000), sets CSP (`frame-ancestors 'self'` editor / `'none'` published) + security headers; stores nonce on `event.context.cspNonce`
+- ✅ **`useCspNonce()` composable** — `apps/runtime/composables/useCspNonce.ts` reads from request context (SSR) or `<meta name="csp-nonce">` (client after hydration)
+- ✅ **Nuxt render hook** — `nuxt.config.ts` `'render:html'` hook reads `event.context.cspNonce` and injects `nonce="..."` on every Nuxt-emitted `<script>` and `<style>` (hydration, inline styles, etc.)
+- ✅ **`[slug].vue` dynamic styles** — `regenerateStyles()` sets `.nonce` on dynamically created `<style>` element; `useHead` injects `<meta name="csp-nonce">` for client-side access
+- ✅ **Renderer nonce threading** — `renderBlock()` and layout variants accept optional `RenderOptions { nonce? }` for future block types needing inline styles
+- ✅ **8 unit tests** in `node-build-server/src/__tests__/csp.test.ts` — nonce entropy, uniqueness, base64url encoding, all CSP directives, `frame-ancestors` by context, no `unsafe-inline/eval`, extra directives merge
+- ✅ **No `unsafe-inline` or `unsafe-eval`** in any CSP header
+- ✅ **Editor iframe preserved** — `frame-ancestors 'self'` in editor mode; `connect-src` includes `ws: wss:` for WebSocket (collab + voice)
+- Total tests: 26 passing (8 CSP + 6 collab + 8 pageGenerator + 4 pageGeneratorHelpers)
 
 ### 11. ✅ HTML → Block Conversion — COMPLETE (merged into Feature #7)
 - Implemented as the "HTML" tab of the Generate Page modal

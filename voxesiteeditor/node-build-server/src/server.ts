@@ -1,4 +1,6 @@
 import { createServer } from 'http'
+import { promises as fsPromises } from 'fs'
+import path from 'path'
 import express from 'express'
 import cors from 'cors'
 import { WebSocketServer } from 'ws'
@@ -23,6 +25,21 @@ const app = express()
 
 app.use(cors())
 app.use(express.json())
+
+// ─── Global security headers ──────────────────────────────────────────────────
+//
+// Applied to every response from the build server.
+// Pages served via the Nuxt SSR runtime have their own CSP middleware.
+// Static published pages receive per-slug CSP headers from the slug-specific
+// middleware below (which reads the sidecar {slug}.headers.json file).
+
+app.use((_req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff')
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN')
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin')
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
+  next()
+})
 
 // ─── Site-level routes (new) ─────────────────────────────────────────────────
 
@@ -365,6 +382,27 @@ app.post('/api/:siteId/generate/html', async (req, res) => {
 })
 
 // ─── Static serve ─────────────────────────────────────────────────────────────
+//
+// Static published pages are served from public_builds/{siteId}/{slug}/index.html.
+// Each slug directory has a sidecar {slug}.headers.json written by buildSite.ts
+// that contains the Content-Security-Policy header with the per-file nonce and
+// additional security headers.  We read it and forward the headers before serving
+// the static file so browsers enforce the CSP set at build time.
+
+app.use('/sites/:siteId/pages/:slug', async (req, res, next) => {
+  const { siteId, slug } = req.params
+  const headersFile = path.resolve(`./public_builds/${siteId}/${slug}.headers.json`)
+  try {
+    const raw = await fsPromises.readFile(headersFile, 'utf-8')
+    const headers: Record<string, string> = JSON.parse(raw)
+    for (const [name, value] of Object.entries(headers)) {
+      res.setHeader(name, value)
+    }
+  } catch {
+    // No sidecar — page not yet built; continue without extra CSP header
+  }
+  next()
+})
 
 app.use('/assets', express.static('./public_builds'))
 
