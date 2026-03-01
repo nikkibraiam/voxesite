@@ -1,6 +1,23 @@
 import { writeFile, readFile, readdir, mkdir } from 'fs/promises'
 import { resolve, join } from 'path'
 
+/** Copy every file from srcDir to destDir. Skips silently if srcDir is absent. */
+async function copyDirFiles(srcDir: string, destDir: string): Promise<void> {
+  let files: string[]
+  try {
+    files = await readdir(srcDir)
+  } catch (err: any) {
+    if (err.code === 'ENOENT') return // directory doesn't exist yet — fine
+    throw err
+  }
+  if (files.length === 0) return
+  await mkdir(destDir, { recursive: true })
+  for (const file of files) {
+    const content = await readFile(join(srcDir, file))
+    await writeFile(join(destDir, file), content)
+  }
+}
+
 interface Page {
   id: string
   slug: string
@@ -34,6 +51,11 @@ export async function saveVersion(siteId: string, site: Site): Promise<void> {
     JSON.stringify(site, null, 2),
     'utf-8'
   )
+
+  // Snapshot per-page CSS files alongside site.json so rollback can restore styles
+  const cssSourceDir = resolve(`./runtime_storage/${siteId}/generated-css`)
+  await copyDirFiles(cssSourceDir, join(versionDir, 'generated-css'))
+
   console.log(`[versions] Snapshot saved: ${siteId} v${site.version}`)
 }
 
@@ -109,6 +131,11 @@ export async function rollbackVersion(siteId: string, version: string): Promise<
       'utf-8'
     )
   }
+
+  // Restore per-page CSS files (older snapshots without CSS are handled gracefully)
+  const cssVersionDir = join(resolve(`./runtime_storage/${siteId}/versions/${version}`), 'generated-css')
+  const cssTargetDir  = join(baseDir, 'generated-css')
+  await copyDirFiles(cssVersionDir, cssTargetDir)
 
   console.log(`[versions] Rolled back ${siteId} to v${version}`)
   return site

@@ -6,6 +6,19 @@ import type { SiteVersion } from '@cms/contracts'
 const RUNTIME_ORIGIN = 'http://localhost:3001'
 const SITE_ID = 'demosite'
 
+// ─── Module-level singletons ─────────────────────────────────────────────────
+// Declared outside the composable function so every caller (index.vue,
+// VersionHistoryPanel.vue, etc.) reads and writes the same reactive state.
+
+/** Published version snapshots fetched from the build server. */
+const versionHistory = ref<SiteVersion[]>([])
+
+/** Controls the Version History side panel visibility. */
+const isVersionPanelOpen = ref(false)
+
+/** True while a rollback request is in flight. */
+const isRollbackLoading = ref(false)
+
 /**
  * Owns the iframe ref, live-preview sync, page load, save, and publish.
  * Moves all HTTP side effects and postMessage wiring out of index.vue.
@@ -18,9 +31,6 @@ export function usePageEditor() {
   // Links to the named template ref in the component — no need to return this.
   // useTemplateRef is Vue 3.5+ and resolves on the current component instance.
   const previewFrame = useTemplateRef<HTMLIFrameElement>('previewFrame')
-
-  /** Published version snapshots fetched from the build server. */
-  const versionHistory = ref<SiteVersion[]>([])
 
   // ─── Live preview sync (page) ────────────────────────────────────────────────
   // store.page is a computed alias for currentPage. Deep-watching it fires on
@@ -124,6 +134,29 @@ export function usePageEditor() {
     }
   }
 
+  // ─── Rollback ────────────────────────────────────────────────────────────────
+  // Restores the site to a previous published snapshot.
+  // After a successful rollback the page is reloaded so all editor state is
+  // refreshed from the server — this is intentional and expected by the user.
+  async function rollbackTo(siteId: string, version: string) {
+    isRollbackLoading.value = true
+    try {
+      const result = await $fetch<{ ok: boolean; data: any }>(
+        `http://localhost:2999/api/${siteId}/rollback/${version}`,
+        { method: 'POST' }
+      )
+      if (result.ok) {
+        isVersionPanelOpen.value = false
+        window.location.reload()
+      }
+    } catch (err: any) {
+      console.error('[rollback] Failed:', err)
+      alert('Error al restaurar la versión. Inténtalo de nuevo.')
+    } finally {
+      isRollbackLoading.value = false
+    }
+  }
+
   // ─── Bootstrap ──────────────────────────────────────────────────────────────
   onMounted(async () => {
     // Load the full site from the backend into the store
@@ -157,7 +190,15 @@ export function usePageEditor() {
     })
   })
 
-  return { savePage, publishSite, versionHistory, loadVersionHistory }
+  return {
+    savePage,
+    publishSite,
+    versionHistory,
+    loadVersionHistory,
+    isVersionPanelOpen,
+    isRollbackLoading,
+    rollbackTo
+  }
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
