@@ -36,7 +36,7 @@ export class WhisperAdapter implements TranscriptionAdapter {
 
   async *transcribe(audioBuffer: Buffer, mimeType = 'audio/webm'): AsyncIterable<string> {
     const formData = new FormData()
-    const blob = new Blob([audioBuffer], { type: mimeType })
+    const blob = new Blob([audioBuffer as any], { type: mimeType })
     formData.append('audio_file', blob, 'audio.webm')
 
     const response = await fetch(`${this.baseUrl}/asr?output=json`, {

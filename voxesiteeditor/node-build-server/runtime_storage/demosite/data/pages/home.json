@@ -6,11 +6,20 @@
       "id": "aa0e520c-3385-4738-a67e-0efacfbd6437",
       "type": "Hero",
       "props": {
-        "title": "Braiam Test news"
+        "class": "",
+        "title": "Braiam Test ",
+        "subtitle": ""
       },
       "styles": {
+        "": {
+          "background-color": "#000000"
+        },
+        ".text": {
+          "font-size": "",
+          "font-weight": ""
+        },
         ".text, .hero__title, .hero__subtitle": {
-          "color": "#c83c3c"
+          "color": "#df2525"
         }
       }
     },
@@ -18,14 +27,20 @@
       "id": "173ae8d5-54cb-419a-a583-d0a835dc7862",
       "type": "Hero",
       "props": {
-        "title": "Hero desde edi br"
+        "class": "",
+        "title": "Hero desde edi br",
+        "subtitle": ""
       },
       "styles": {
-        ".text, .hero__title, .hero__subtitle": {
-          "color": "#ff5c5c"
-        },
         "": {
           "background-color": "#431414"
+        },
+        ".text": {
+          "font-size": "",
+          "font-weight": ""
+        },
+        ".text, .hero__title, .hero__subtitle": {
+          "color": "#ff5c5c"
         }
       }
     },
@@ -36,11 +51,11 @@
         "text": "Texto desde editor"
       },
       "styles": {
-        ".text, .hero__title, .hero__subtitle": {
-          "color": "#04ff00"
-        },
         ".text": {
           "font-size": "23"
+        },
+        ".text, .hero__title, .hero__subtitle": {
+          "color": "#04ff00"
         }
       }
     },
@@ -50,12 +65,12 @@
       "props": {
         "title": "Hero desde editor"
       },
-      "customCss": ".hero__subtitle{\nbackground-color:green!important;\nfont-size:23px;\ncolor: red;\n}",
       "styles": {
         ".text, .hero__title, .hero__subtitle": {
           "color": "#d48c8c"
         }
-      }
+      },
+      "customCss": ".hero__subtitle{\nbackground-color:green!important;\nfont-size:23px;\ncolor: red;\n}"
     }
   ],
   "cssFile": "/generated-css/home.css"

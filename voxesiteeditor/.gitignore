@@ -3,3 +3,5 @@
 **/dist/**
 **/public_builds/**
 **/runtime_storage/**
+.DS_Store
+.env

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { VueDraggable } from 'vue-draggable-plus'
 import { BlockSchemas } from '@cms/ui/schemas'
-import SelectableBlock from '@cms/ui/wrappers/SelectableBlock.vue'
+import { SelectableBlock } from '@cms/ui/wrappers'
 import BlockEditorPanel from '../components/BlockEditorPanel.vue'
 import AiPromptPanel from '../components/AiPromptPanel.vue'
 import GeneratePageModal from '../components/GeneratePageModal.vue'
