@@ -3,6 +3,36 @@ import { OpenAIAdapter } from './openaiAdapter'
 import { AnthropicAdapter } from './anthropicAdapter'
 
 /**
+ * Ollama model names known to support vision (image input).
+ * Updated as new vision-capable models are released.
+ */
+const OLLAMA_VISION_MODELS = ['llava', 'moondream', 'bakllava', 'llava-llama3', 'llava-phi3']
+
+/**
+ * Returns true if the currently configured LLM is able to process image inputs.
+ *
+ * - Anthropic: all Claude models support vision.
+ * - OpenAI: gpt-4o and gpt-4-vision-preview support vision.
+ * - Ollama: only explicit vision models (llava, moondream, bakllava, etc.).
+ */
+export function isVisionCapable(): boolean {
+  const provider = process.env.LLM_PROVIDER ?? 'openai'
+  const model = (process.env.LLM_MODEL ?? '').toLowerCase()
+
+  if (provider === 'anthropic') return true
+
+  if (provider === 'openai') {
+    return model.includes('4o') || model.includes('vision') || model.includes('gpt-4-turbo')
+  }
+
+  if (provider === 'ollama') {
+    return OLLAMA_VISION_MODELS.some(m => model.includes(m))
+  }
+
+  return false
+}
+
+/**
  * Create the LLM adapter based on environment variables.
  *
  * Environment variables:

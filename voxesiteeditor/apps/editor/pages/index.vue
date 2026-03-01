@@ -4,11 +4,13 @@ import { BlockSchemas } from '@cms/ui/schemas'
 import SelectableBlock from '@cms/ui/wrappers/SelectableBlock.vue'
 import BlockEditorPanel from '../components/BlockEditorPanel.vue'
 import AiPromptPanel from '../components/AiPromptPanel.vue'
+import GeneratePageModal from '../components/GeneratePageModal.vue'
 import { usePageStore } from '../stores/usePageStore'
 import { usePageEditor } from '../composables/usePageEditor'
 import { useLayoutEditor } from '../composables/useLayoutEditor'
 import { useDragDrop } from '../composables/useDragDrop'
 import { useAiEditor } from '../composables/useAiEditor'
+import { usePageGenerator } from '../composables/usePageGenerator'
 
 const store = usePageStore()
 const { savePage, publishSite } = usePageEditor()
@@ -23,6 +25,7 @@ const {
 } = useLayoutEditor()
 const { draggableBlocks, sortableOptions } = useDragDrop()
 const { isAiPanelOpen, toggleAiPanel } = useAiEditor()
+const { openModal: openGenerateModal } = usePageGenerator()
 
 function addNewPage() {
   store.addPage({
@@ -55,6 +58,13 @@ function addNewPage() {
       </button>
 
       <button @click="addNewPage">+ Página</button>
+
+      <!-- Generate page — 44×44 px touch target -->
+      <button
+        class="generate-btn"
+        title="Generar página con IA (⚡)"
+        @click="openGenerateModal()"
+      >⚡</button>
 
       <!-- AI toggle — right-aligned -->
       <button
@@ -176,6 +186,9 @@ function addNewPage() {
 
   <!-- Side panel — slides in from the right, sits over the iframe -->
   <BlockEditorPanel />
+
+  <!-- Generate page modal — three tabs: URL / Screenshot / HTML -->
+  <GeneratePageModal />
 </template>
 
 <style>
@@ -225,6 +238,26 @@ function addNewPage() {
   background: #4a90d9;
   color: #fff;
   border-color: #4a90d9;
+}
+
+/* Generate page button — ⚡ icon, 44×44 px touch target */
+.generate-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  height: 44px;
+  padding: 0 10px;
+  background: #2e2e50;
+  color: #c8c8f8;
+  border-color: #2e2e50;
+  font-size: 16px;
+}
+
+.generate-btn:hover {
+  background: #5858c8;
+  color: #fff;
+  border-color: #5858c8;
 }
 
 /* AI toggle — push to the right end of the tab bar */

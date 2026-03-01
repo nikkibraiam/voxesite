@@ -9,9 +9,13 @@ import { readSite } from './readSite'
 import { readSiteFull } from './readSiteFull'
 import { saveSiteFull } from './saveSiteFull'
 import { saveVersion, listVersions, rollbackVersion } from './versionManager'
-import { createLLMAdapter } from './llm/factory'
+import { createLLMAdapter, isVisionCapable } from './llm/factory'
 import type { LLMMessage } from './llm/types'
 import { createTranscriptionAdapter } from './transcription/whisperAdapter'
+import { fetchUrlContent } from './pageGenerator/urlFetcher'
+import { prepareScreenshot } from './pageGenerator/screenshotHandler'
+import { sanitizeHtml } from './pageGenerator/htmlSanitizer'
+import { generatePage } from './pageGenerator/pageGeneratorService'
 
 const app = express()
 
@@ -222,6 +226,141 @@ Rules:
 - Do not invent new block types not listed in the schemas above
 - If unsure, return the page unchanged`
 }
+
+// ─── Page generation routes ───────────────────────────────────────────────────
+//
+// All three routes accept a `schemaContext` field in the request body (serialised
+// BlockSchemas + LayoutSchemas, forwarded by the Nuxt proxy that has access to
+// @cms/ui) and support SSE streaming when Accept: text/event-stream is set.
+
+function sseHeaders(res: express.Response) {
+  res.setHeader('Content-Type', 'text/event-stream')
+  res.setHeader('Cache-Control', 'no-cache')
+  res.setHeader('Connection', 'keep-alive')
+  res.flushHeaders()
+}
+
+async function handleGenerate(
+  res: express.Response,
+  schemaContext: string,
+  textInput: string,
+  image?: { data: string; mimeType: string }
+) {
+  const wantsStream = (res.req?.headers['accept'] ?? '').includes('text/event-stream')
+
+  if (wantsStream) {
+    sseHeaders(res)
+    try {
+      const page = await generatePage({
+        schemaContext,
+        textInput,
+        image,
+        onToken: (token) => res.write(`data: ${JSON.stringify({ token })}\n\n`)
+      })
+      res.write(`data: ${JSON.stringify({ done: true, page })}\n\n`)
+      res.end()
+    } catch (err: any) {
+      res.write(`data: ${JSON.stringify({ error: err.message ?? 'Generation failed', raw: err.raw })}\n\n`)
+      res.end()
+    }
+  } else {
+    try {
+      const page = await generatePage({ schemaContext, textInput, image })
+      res.json({ ok: true, page })
+    } catch (err: any) {
+      res.status(500).json({ ok: false, error: err.message ?? 'Generation failed', raw: err.raw })
+    }
+  }
+}
+
+/**
+ * POST /api/:siteId/generate/url
+ * Body: { url: string, schemaContext: string }
+ *
+ * Fetches the URL with Puppeteer, extracts screenshot + DOM text,
+ * and generates a Page JSON via the configured LLM.
+ */
+app.post('/api/:siteId/generate/url', async (req, res) => {
+  const { url, schemaContext } = req.body as { url: string; schemaContext: string }
+
+  if (!url || !schemaContext) {
+    return res.status(400).json({ ok: false, error: 'url and schemaContext are required' })
+  }
+
+  let fetchResult: Awaited<ReturnType<typeof fetchUrlContent>>
+  try {
+    fetchResult = await fetchUrlContent(url)
+  } catch (err: any) {
+    return res.status(422).json({ ok: false, error: err.message })
+  }
+
+  const textInput = `Generate a CMS page based on this website.\n\nURL: ${url}\n\nVisible DOM structure:\n${fetchResult.domText}`
+
+  // Attach screenshot only when the model supports vision
+  const image = isVisionCapable()
+    ? { data: fetchResult.screenshotBase64, mimeType: 'image/jpeg' as const }
+    : undefined
+
+  await handleGenerate(res, schemaContext, textInput, image)
+})
+
+/**
+ * POST /api/:siteId/generate/screenshot
+ * Body: { image: string (base64 or data URI), mimeType?: string, schemaContext: string }
+ *
+ * Requires a vision-capable model. Returns 400 immediately if the configured
+ * model is text-only.
+ */
+app.post('/api/:siteId/generate/screenshot', async (req, res) => {
+  const { image: rawImage, mimeType, schemaContext } = req.body as {
+    image: string
+    mimeType?: string
+    schemaContext: string
+  }
+
+  if (!rawImage || !schemaContext) {
+    return res.status(400).json({ ok: false, error: 'image and schemaContext are required' })
+  }
+
+  if (!isVisionCapable()) {
+    return res.status(400).json({
+      ok: false,
+      error: 'Vision model required for screenshot input. Set LLM_MODEL to a vision-capable model (e.g. gpt-4o, claude-opus-4-6, llava).'
+    })
+  }
+
+  let imageInput: ReturnType<typeof prepareScreenshot>
+  try {
+    imageInput = prepareScreenshot(rawImage, mimeType)
+  } catch (err: any) {
+    return res.status(400).json({ ok: false, error: err.message })
+  }
+
+  const textInput = 'Generate a CMS page that faithfully reproduces the layout and content visible in this screenshot.'
+
+  await handleGenerate(res, schemaContext, textInput, imageInput)
+})
+
+/**
+ * POST /api/:siteId/generate/html
+ * Body: { html: string, schemaContext: string }
+ *
+ * Sanitises the pasted HTML server-side, converts it to a text outline,
+ * and generates a Page JSON via the configured LLM (no vision required).
+ */
+app.post('/api/:siteId/generate/html', async (req, res) => {
+  const { html, schemaContext } = req.body as { html: string; schemaContext: string }
+
+  if (!html || !schemaContext) {
+    return res.status(400).json({ ok: false, error: 'html and schemaContext are required' })
+  }
+
+  const { domText } = sanitizeHtml(html)
+
+  const textInput = `Generate a CMS page based on this HTML content.\n\nDOM structure:\n${domText}`
+
+  await handleGenerate(res, schemaContext, textInput)
+})
 
 // ─── Static serve ─────────────────────────────────────────────────────────────
 

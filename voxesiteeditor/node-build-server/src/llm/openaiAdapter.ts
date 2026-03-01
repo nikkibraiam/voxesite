@@ -1,6 +1,28 @@
 import type { LLMAdapter, LLMMessage } from './types'
 
 /**
+ * Converts an LLMMessage to the OpenAI API message shape.
+ * When `message.image` is present the content becomes a multimodal array.
+ */
+function toOpenAIMessage(msg: LLMMessage): any {
+  if (msg.image && msg.role === 'user') {
+    return {
+      role: msg.role,
+      content: [
+        {
+          type: 'image_url',
+          image_url: {
+            url: `data:${msg.image.mimeType};base64,${msg.image.data}`
+          }
+        },
+        { type: 'text', text: msg.content }
+      ]
+    }
+  }
+  return { role: msg.role, content: msg.content }
+}
+
+/**
  * OpenAI-compatible adapter.
  * Works with: OpenAI API, Ollama (LLM_BASE_URL=http://localhost:11434),
  * and any provider that implements the /v1/chat/completions endpoint.
@@ -25,7 +47,7 @@ export class OpenAIAdapter implements LLMAdapter {
         'Content-Type': 'application/json',
         ...(this.apiKey ? { Authorization: `Bearer ${this.apiKey}` } : {})
       },
-      body: JSON.stringify({ model: this.model, messages, stream: false })
+      body: JSON.stringify({ model: this.model, messages: messages.map(toOpenAIMessage), stream: false })
     })
 
     if (!response.ok) {
@@ -44,7 +66,7 @@ export class OpenAIAdapter implements LLMAdapter {
         'Content-Type': 'application/json',
         ...(this.apiKey ? { Authorization: `Bearer ${this.apiKey}` } : {})
       },
-      body: JSON.stringify({ model: this.model, messages, stream: true })
+      body: JSON.stringify({ model: this.model, messages: messages.map(toOpenAIMessage), stream: true })
     })
 
     if (!response.ok) {

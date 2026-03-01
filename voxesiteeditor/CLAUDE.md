@@ -52,11 +52,21 @@ voxesiteeditor/
 | `node-build-server/src/saveSiteFull.ts` | ✅ Write `site.json` + explode per-page files + CSS |
 | `node-build-server/src/versionManager.ts` | ✅ `saveVersion`, `listVersions`, `rollbackVersion` |
 | `node-build-server/src/server.ts` | ✅ Express routes — includes Site CRUD, versions, rollback, AI prompt |
-| `node-build-server/src/llm/types.ts` | ✅ `LLMMessage`, `LLMAdapter` interface |
-| `node-build-server/src/llm/openaiAdapter.ts` | ✅ OpenAI-compatible adapter (OpenAI + Ollama) |
-| `node-build-server/src/llm/anthropicAdapter.ts` | ✅ Anthropic Messages API adapter |
-| `node-build-server/src/llm/factory.ts` | ✅ `createLLMAdapter()` — reads `LLM_PROVIDER` env var, returns correct adapter |
+| `node-build-server/src/llm/types.ts` | ✅ `LLMMessage` (with optional `image` field), `LLMImageInput`, `LLMAdapter` interface |
+| `node-build-server/src/llm/openaiAdapter.ts` | ✅ OpenAI-compatible adapter (OpenAI + Ollama) — supports multimodal image messages |
+| `node-build-server/src/llm/anthropicAdapter.ts` | ✅ Anthropic Messages API adapter — supports multimodal image messages |
+| `node-build-server/src/llm/factory.ts` | ✅ `createLLMAdapter()` + `isVisionCapable()` — reads `LLM_PROVIDER` env var |
 | `node-build-server/src/transcription/whisperAdapter.ts` | ✅ `TranscriptionAdapter` interface, `WhisperAdapter` (POST /asr multipart), `MockWhisperAdapter` (dev fallback), `createTranscriptionAdapter()` factory |
+| `node-build-server/src/pageGenerator/urlFetcher.ts` | ✅ Puppeteer screenshot + DOM text extraction from a URL |
+| `node-build-server/src/pageGenerator/screenshotHandler.ts` | ✅ Base64/data-URI image validation + normalisation |
+| `node-build-server/src/pageGenerator/htmlSanitizer.ts` | ✅ Server-side DOMPurify sanitisation + DOM text outline |
+| `node-build-server/src/pageGenerator/pageGeneratorService.ts` | ✅ Orchestrates LLM call — system prompt with schema context, JSON extraction, one-retry logic |
+| `node-build-server/src/__tests__/pageGenerator.test.ts` | ✅ Unit tests (node:test) — JSON parsing, markdown fence stripping, sanitiser, screenshot handler |
+| `apps/editor/server/api/generate-url.post.ts` | ✅ `POST /api/generate-url` — proxy to build server, injects schema context, SSE streaming |
+| `apps/editor/server/api/generate-screenshot.post.ts` | ✅ `POST /api/generate-screenshot` — proxy with vision-model error forwarding |
+| `apps/editor/server/api/generate-html.post.ts` | ✅ `POST /api/generate-html` — proxy, no vision required |
+| `apps/editor/composables/usePageGenerator.ts` | ✅ Three-flow generation composable — `isModalOpen`, `generateFromUrl/Screenshot/Html`, slug deduplication |
+| `apps/editor/components/GeneratePageModal.vue` | ✅ Three-tab modal (URL / Captura / HTML) with loading, streaming output, error display |
 | `apps/editor/composables/useVoiceInput.ts` | ✅ WebSocket manager for voice transcription — listens for `VOICE_INPUT` postMessages from native, forwards audio to WS, streams `liveTranscript`, populates `aiPrompt` on `TRANSCRIPT_DONE` |
 
 ---
@@ -290,12 +300,20 @@ All sub-tasks done. `LayoutHeader` + `LayoutFooter` block types, schemas, compon
 - ✅ Env vars: `WHISPER_BASE_URL` (node-build-server), `NUXT_PUBLIC_WS_URL` (editor)
 - **Pending (separate phase):** Native Android/iOS TTS integration — Android should use `TextToSpeech` API, iOS should use `AVSpeechSynthesizer` when the WebView emits an `AI_VOICE_RESPONSE` postMessage. See TODO comments in `useAiEditor.ts` and `[slug].vue`.
 
-### 7. Page Generation from URL or Screenshot
-- **URL → Site JSON:** Server fetches URL (Puppeteer/headless browser), extracts HTML, sends to LLM with block schema as context → returns `Page` JSON
-- **Screenshot → Site JSON:** Image upload → vision-capable LLM with block schema → returns `Page` JSON
-- **HTML paste → Site JSON:** User pastes raw HTML → server parses DOM → LLM maps elements to block types → returns `Page` JSON (must be near real-time, streaming preferred)
-- All three flows must work with local LLMs (vision models like LLaVA for screenshot analysis)
-- Block schemas in `packages/ui/schemas/` are serialized and sent as LLM context in all flows
+### 7. ✅ Page Generation from URL or Screenshot — COMPLETE
+- ✅ **URL → Page JSON:** Puppeteer captures viewport screenshot + DOM text outline; vision models receive both, text-only models receive text only; `POST /api/:siteId/generate/url`
+- ✅ **Screenshot → Page JSON:** PNG/JPG/WEBP upload as base64 data URI; requires vision model; returns 400 with clear message for text-only models; `POST /api/:siteId/generate/screenshot`
+- ✅ **HTML paste → Page JSON:** Server-side DOMPurify sanitisation + jsdom DOM outline; works with text-only LLMs; `POST /api/:siteId/generate/html`
+- ✅ **`isVisionCapable()`** in `factory.ts` — detects vision support per provider: all Anthropic models, gpt-4o/vision for OpenAI, llava/moondream/bakllava/llava-llama3/llava-phi3 for Ollama
+- ✅ **LLMMessage extended** with optional `image?: LLMImageInput` field; both OpenAI and Anthropic adapters handle multimodal messages
+- ✅ **One-retry logic** in `pageGeneratorService.ts`: if LLM returns invalid JSON, sends a correction prompt and tries once more; throws with `raw` field on second failure
+- ✅ **SSE streaming** for all three flows — tokens appear in modal as they arrive
+- ✅ **`GeneratePageModal.vue`** — three-tab modal (URL / Captura / HTML), file dropzone, loading spinner, error display, auto-closes on success
+- ✅ **`usePageGenerator()`** composable — manages modal state + SSE fetch + `store.addPage()` + slug deduplication
+- ✅ **⚡ button** in editor tab bar (44×44 px touch target) opens the modal
+- ✅ **8 unit tests** in `node-build-server/src/__tests__/pageGenerator.test.ts` (node:test, all passing)
+- ✅ **Nuxt proxy routes** in `apps/editor/server/api/` — inject schema context, forward SSE stream
+- **Remaining constraint:** Screenshot flow requires a vision-capable model; text-only Ollama models (llama3, mistral, etc.) cannot process screenshots — returns HTTP 400 with descriptive error
 
 ### 8. Versioned Site Publishing — partially complete ✅
 - ✅ Version snapshots saved to `runtime_storage/{siteId}/versions/{version}/site.json` on every publish
@@ -317,11 +335,10 @@ All sub-tasks done. `LayoutHeader` + `LayoutFooter` block types, schemas, compon
 - Nonce generation happens at `node-build-server` level during static generation
 - The renderer must inject nonces into `<script>` and `<style>` tags at build time
 
-### 11. HTML → Block Conversion
-- When a user pastes arbitrary HTML, the system converts it to block JSON automatically
-- Flow: paste HTML → server parses DOM → LLM maps to block schema → returns `Page` JSON
-- Must be near real-time (streaming preferred)
-- Security: sanitize all pasted HTML before processing (DOMPurify or equivalent server-side)
+### 11. ✅ HTML → Block Conversion — COMPLETE (merged into Feature #7)
+- Implemented as the "HTML" tab of the Generate Page modal
+- Flow: paste HTML → server DOMPurify sanitisation + jsdom outline → LLM → `Page` JSON
+- SSE streaming, works with text-only local LLMs
 
 ---
 
@@ -358,6 +375,8 @@ Implications:
 - All LLM calls go through the `LLMAdapter` interface — never call LLM APIs directly from components
 - Layout block props use **flat keys** (no nested objects) so `BlockEditorModal` can bind them with `draft.props[field.key]` directly
 - Complex array props (`navLinks`, `columns`) use `type: 'json'` in the schema — the component must accept both Array and JSON string at runtime
+- **Page generation routes** on node-build-server: `POST /api/:siteId/generate/url`, `POST /api/:siteId/generate/screenshot`, `POST /api/:siteId/generate/html` — all require `schemaContext` in body (injected by Nuxt proxy)
+- **Vision capability** is checked via `isVisionCapable()` from `node-build-server/src/llm/factory.ts` before sending image data to the LLM — screenshot route returns HTTP 400 for text-only models
 
 ---
 
@@ -369,3 +388,5 @@ Implications:
 - Version rollback UI not yet built (API exists — `versionHistory` ref is available in `usePageEditor`)
 - `siteId` is hardcoded as `'demosite'` throughout — needs to become dynamic for multi-tenant SaaS
 - Grid system (`SiteLayout.grids[]`) type placeholder exists but UI and renderer integration pending
+- Screenshot/URL page generation requires a vision-capable model (gpt-4o, claude-opus-4-6, llava, moondream); text-only models can only use the HTML flow
+- Puppeteer Chromium is downloaded to `~/.cache/puppeteer/` — requires ~300MB disk space; use `puppeteer-core` + system Chrome if disk is constrained

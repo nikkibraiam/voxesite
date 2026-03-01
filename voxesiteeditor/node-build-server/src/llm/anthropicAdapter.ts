@@ -107,11 +107,29 @@ export class AnthropicAdapter implements LLMAdapter {
 
 function splitMessages(messages: LLMMessage[]): {
   system: string
-  conversation: Array<{ role: 'user' | 'assistant'; content: string }>
+  conversation: Array<{ role: 'user' | 'assistant'; content: any }>
 } {
   const systemParts = messages.filter(m => m.role === 'system').map(m => m.content)
   const conversation = messages
     .filter(m => m.role !== 'system')
-    .map(m => ({ role: m.role as 'user' | 'assistant', content: m.content }))
+    .map(m => {
+      if (m.image && m.role === 'user') {
+        return {
+          role: 'user' as const,
+          content: [
+            {
+              type: 'image',
+              source: {
+                type: 'base64',
+                media_type: m.image.mimeType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
+                data: m.image.data
+              }
+            },
+            { type: 'text', text: m.content }
+          ]
+        }
+      }
+      return { role: m.role as 'user' | 'assistant', content: m.content }
+    })
   return { system: systemParts.join('\n'), conversation }
 }
