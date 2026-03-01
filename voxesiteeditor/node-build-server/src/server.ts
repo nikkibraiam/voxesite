@@ -20,6 +20,8 @@ import { sanitizeHtml } from './pageGenerator/htmlSanitizer'
 import { generatePage } from './pageGenerator/pageGeneratorService'
 import { setupCollaborationServer } from './collaboration/yjsServer'
 import { pool } from './db/client'
+import { handleFormSubmit } from './formEndpoints/proxyHandler'
+import { encrypt } from './formEndpoints/encryptionUtils'
 
 const app = express()
 
@@ -379,6 +381,121 @@ app.post('/api/:siteId/generate/html', async (req, res) => {
   const textInput = `Generate a CMS page based on this HTML content.\n\nDOM structure:\n${domText}`
 
   await handleGenerate(res, schemaContext, textInput)
+})
+
+// ─── Form submission + endpoint CRUD routes ───────────────────────────────────
+//
+// Simple in-memory rate limiter: max 10 requests per IP per 60 seconds.
+// This avoids an external dependency (express-rate-limit) while still protecting
+// the form submission endpoint from abuse.
+
+interface RateBucket { count: number; resetAt: number }
+const _rateBuckets = new Map<string, RateBucket>()
+const RATE_WINDOW_MS = 60_000
+const RATE_MAX = 10
+
+function formRateLimiter(req: express.Request, res: express.Response, next: express.NextFunction) {
+  const ip = String(req.headers['x-forwarded-for'] ?? req.socket.remoteAddress ?? 'unknown')
+  const now = Date.now()
+  let bucket = _rateBuckets.get(ip)
+
+  if (!bucket || now > bucket.resetAt) {
+    bucket = { count: 1, resetAt: now + RATE_WINDOW_MS }
+    _rateBuckets.set(ip, bucket)
+    return next()
+  }
+
+  bucket.count += 1
+  if (bucket.count > RATE_MAX) {
+    res.setHeader('Retry-After', Math.ceil((bucket.resetAt - now) / 1000))
+    return res.status(429).json({ error: 'Too many requests. Please wait before submitting again.' })
+  }
+  next()
+}
+
+// POST /api/:siteId/form-submit — secure proxy (real endpoint URL never reaches browser)
+app.post('/api/:siteId/form-submit', formRateLimiter, async (req, res) => {
+  await handleFormSubmit(req, res, String(req.params.siteId))
+})
+
+// GET /api/:siteId/form-endpoints — list all endpoints for a site
+app.get('/api/:siteId/form-endpoints', async (req, res) => {
+  const { siteId } = req.params
+  if (!pool) return res.status(503).json({ error: 'Database not configured' })
+  try {
+    const result = await pool.query(
+      'SELECT key, site_id, method, headers, rate_config, allowed_origins, created_at, updated_at FROM form_endpoints WHERE site_id = $1 ORDER BY created_at DESC',
+      [siteId]
+    )
+    res.json({ ok: true, endpoints: result.rows })
+  } catch (err: any) {
+    res.status(500).json({ ok: false, error: err.message })
+  }
+})
+
+// POST /api/:siteId/form-endpoints — create or update an endpoint
+app.post('/api/:siteId/form-endpoints', async (req, res) => {
+  const { siteId } = req.params
+  if (!pool) return res.status(503).json({ error: 'Database not configured' })
+
+  const { key, url, method, headers: customHeaders, authValue, rateConfig, allowedOrigins } = req.body as {
+    key: string
+    url: string
+    method?: string
+    headers?: Record<string, string>
+    authValue?: string
+    rateConfig?: object
+    allowedOrigins?: string[]
+  }
+
+  if (!key || !url) return res.status(400).json({ error: 'key and url are required' })
+
+  try {
+    // Encrypt authValue before storing if provided
+    let encryptedAuth: string | null = null
+    if (authValue) {
+      encryptedAuth = encrypt(authValue)
+    }
+
+    await pool.query(
+      `INSERT INTO form_endpoints (key, site_id, url, method, headers, auth_value, rate_config, allowed_origins, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())
+       ON CONFLICT (key) DO UPDATE SET
+         url = EXCLUDED.url,
+         method = EXCLUDED.method,
+         headers = EXCLUDED.headers,
+         auth_value = EXCLUDED.auth_value,
+         rate_config = EXCLUDED.rate_config,
+         allowed_origins = EXCLUDED.allowed_origins,
+         updated_at = now()`,
+      [
+        key, siteId, url,
+        method ?? 'POST',
+        JSON.stringify(customHeaders ?? {}),
+        encryptedAuth,
+        rateConfig ? JSON.stringify(rateConfig) : null,
+        allowedOrigins ?? null
+      ]
+    )
+    res.json({ ok: true })
+  } catch (err: any) {
+    res.status(500).json({ ok: false, error: err.message })
+  }
+})
+
+// DELETE /api/:siteId/form-endpoints/:key — remove an endpoint
+app.delete('/api/:siteId/form-endpoints/:key', async (req, res) => {
+  const { siteId, key } = req.params
+  if (!pool) return res.status(503).json({ error: 'Database not configured' })
+  try {
+    await pool.query(
+      'DELETE FROM form_endpoints WHERE key = $1 AND site_id = $2',
+      [key, siteId]
+    )
+    res.json({ ok: true })
+  } catch (err: any) {
+    res.status(500).json({ ok: false, error: err.message })
+  }
 })
 
 // ─── Static serve ─────────────────────────────────────────────────────────────

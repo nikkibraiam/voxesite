@@ -5,6 +5,7 @@ import type { BaseBlock, Site, SiteLayout, LayoutBlock } from '@cms/contracts'
 const registry: Record<string, ReturnType<typeof defineAsyncComponent>> = {
   TextBlock: defineAsyncComponent(() => import('../components/TextBlock.vue')),
   Hero: defineAsyncComponent(() => import('../components/Hero.vue')),
+  FormBlock: defineAsyncComponent(() => import('../components/FormBlock.vue')),
   LayoutHeader: defineAsyncComponent(() => import('../components/LayoutHeader.vue')),
   LayoutFooter: defineAsyncComponent(() => import('../components/LayoutFooter.vue'))
 }

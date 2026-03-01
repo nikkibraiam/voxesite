@@ -75,6 +75,15 @@ voxesiteeditor/
 | `apps/editor/composables/usePageGenerator.ts` | ✅ Three-flow generation composable — `isModalOpen`, `generateFromUrl/Screenshot/Html`, slug deduplication |
 | `apps/editor/components/GeneratePageModal.vue` | ✅ Three-tab modal (URL / Captura / HTML) with loading, streaming output, error display |
 | `apps/editor/composables/useVoiceInput.ts` | ✅ WebSocket manager for voice transcription — listens for `VOICE_INPUT` postMessages from native, forwards audio to WS, streams `liveTranscript`, populates `aiPrompt` on `TRANSCRIPT_DONE` |
+| `packages/contracts/blocks/form.ts` | ✅ `FieldType`, `FormField`, `FieldCondition`, `FormProps` — form block types |
+| `packages/ui/schemas/blocks/form.schema.ts` | ✅ `FormSchema` — registered in `BlockSchemas` registry; `fields` as `type: 'json'` |
+| `packages/ui/components/FormBlock.vue` | ✅ Dynamic form renderer — all field types, conditional visibility, submit proxy |
+| `packages/ui/composables/useFormConditions.ts` | ✅ Reactive field visibility + required rules from `conditions[]` array |
+| `packages/ui/composables/useFormValidation.ts` | ✅ Client-side validation — cedula/NIT formats, email, pattern, min/max, required |
+| `node-build-server/src/formEndpoints/encryptionUtils.ts` | ✅ AES-256-GCM `encrypt`/`decrypt` — key from `ENDPOINT_ENCRYPTION_KEY` |
+| `node-build-server/src/formEndpoints/proxyHandler.ts` | ✅ Secure form proxy — endpoint lookup, credential decrypt, server-side re-validation, audit log |
+| `apps/editor/server/api/form-submit.post.ts` | ✅ `POST /api/form-submit` — Nuxt proxy to build server |
+| `apps/editor/composables/useFormEndpoints.ts` | ✅ CRUD composable for `form_endpoints` — `load`, `create`, `remove` |
 
 ---
 
@@ -388,15 +397,22 @@ All sub-tasks done. `LayoutHeader` + `LayoutFooter` block types, schemas, compon
 - ✅ Runtime `[slug].vue`: `site` ref typed as `Site | null`; all `renderBlock(block, { site })` calls pass full site for definition lookup; `PAGE_UPDATE` handler keeps `site.pages` in sync
 - ✅ 12 unit tests in `node-build-server/src/__tests__/composite.test.ts` — createCompositeBlock (5 tests), replaceBlockWithChildren (3 tests), updateCompositeOverride (3 tests), missing-definition guard (1 test); **38 total tests passing**
 
-### 13. JSON Form Builder with Conditions + Secure Endpoint Proxy — Pending
-- Pending: `FormField`, `FieldCondition`, `FormProps` types in `packages/contracts/blocks/form.ts`
-- Pending: `FormBlock.vue` component with `useFormConditions` + `useFormValidation` composables
-- Pending: `form.schema.ts` — `fields` as `type: 'json'`, `endpointKey` as `type: 'string'`
-- Pending: `form_endpoints` table migration (key, site_id, url, auth_value encrypted)
-- Pending: `POST /api/:siteId/form-submit` proxy route with AES-256-GCM credential decryption
-- Pending: Rate limiting per IP + per endpointKey via `formRateLimiter`
-- Pending: Form Endpoints settings panel in editor (CRUD for endpoint configs)
-- Pending: New env var: `ENDPOINT_ENCRYPTION_KEY`
+### 13. ✅ JSON Form Builder with Conditions + Secure Endpoint Proxy — COMPLETE
+- ✅ `FormField`, `FieldCondition`, `FormProps`, `FieldType` types in `packages/contracts/blocks/form.ts`; exported from `packages/contracts/index.ts`
+- ✅ `FormBlock.vue` in `packages/ui/components/` — accepts `fields` as Array or JSON string; uses `useFormConditions` + `useFormValidation`; injects `siteId` via Vue provide/inject
+- ✅ `packages/ui/composables/useFormConditions.ts` — AND logic per field; `show`/`hide`/`require` actions; fields with no conditions are always visible
+- ✅ `packages/ui/composables/useFormValidation.ts` — validates visible fields only; cedula (6–10 digits), NIT (9-digit + dash + check), email, pattern, min/max, required
+- ✅ `packages/ui/schemas/blocks/form.schema.ts` — `FormSchema` with `fields` as `type: 'json'`, `endpointKey` as `type: 'string'`; registered in `BlockSchemas` in `packages/ui/schemas/index.ts`
+- ✅ `FormBlock` registered in `renderComponent.ts` component registry
+- ✅ `form_endpoints` table migration added to `node-build-server/src/db/migrate.ts`
+- ✅ `node-build-server/src/formEndpoints/encryptionUtils.ts` — AES-256-GCM `encrypt`/`decrypt`; key from `ENDPOINT_ENCRYPTION_KEY` env var (64 hex chars)
+- ✅ `node-build-server/src/formEndpoints/proxyHandler.ts` — resolves `endpointKey` → real URL server-side; decrypts `auth_value`; server-side field re-validation; returns only `{ success, status }`; structured JSON audit log
+- ✅ In-memory rate limiter in `server.ts` — max 10 req/IP/minute; no extra dependency
+- ✅ Express routes: `POST /api/:siteId/form-submit`, `GET/POST /api/:siteId/form-endpoints`, `DELETE /api/:siteId/form-endpoints/:key`
+- ✅ `apps/editor/server/api/form-submit.post.ts` — Nuxt proxy to build server
+- ✅ `apps/editor/composables/useFormEndpoints.ts` — `load`, `create`, `remove` CRUD for form endpoints
+- ✅ `ENDPOINT_ENCRYPTION_KEY` documented in `node-build-server/.env`
+- Pending: Form Endpoints settings panel UI in editor (CRUD modal — `useFormEndpoints` composable is ready, panel component not yet built)
 
 ### 14. Full Component Library — Pending
 - Pending: Block Manifest pattern (`packages/ui/blocks/manifest.ts`) — single registration point

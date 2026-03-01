@@ -49,6 +49,28 @@ async function migrate() {
     `)
     console.log('[migrate] Index on "site_versions" — OK')
 
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS form_endpoints (
+        key             TEXT PRIMARY KEY,
+        site_id         TEXT NOT NULL,
+        url             TEXT NOT NULL,
+        method          TEXT NOT NULL DEFAULT 'POST',
+        headers         JSONB DEFAULT '{}',
+        auth_value      TEXT,
+        rate_config     JSONB,
+        allowed_origins TEXT[],
+        created_at      TIMESTAMPTZ DEFAULT now(),
+        updated_at      TIMESTAMPTZ DEFAULT now()
+      );
+    `)
+    console.log('[migrate] Table "form_endpoints" — OK')
+
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_form_endpoints_site_id
+        ON form_endpoints (site_id);
+    `)
+    console.log('[migrate] Index on "form_endpoints" — OK')
+
     console.log('[migrate] All migrations complete.')
   } catch (err) {
     console.error('[migrate] Migration failed:', err)
