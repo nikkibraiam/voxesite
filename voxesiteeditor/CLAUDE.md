@@ -249,6 +249,7 @@ type EditorMessage =
 - [x] **Drag & Drop block reordering** — `vue-draggable-plus` (SortableJS) in editor block list panel; `reorderBlocks(fromIndex, toIndex)` store action creates undo snapshot before splice; `useDragDrop` composable provides `draggableBlocks` computed (get/set) + `sortableOptions`; `SelectableBlock` extended with 44×44 px drag handle (`touch-action:none` for WebView); `PAGE_UPDATE` fires automatically via existing `usePageEditor` deep-watch after every reorder
 - [x] **AI Prompt Space** — collapsible bottom panel (`AiPromptPanel.vue`), `useAiEditor()` composable, `LLMAdapter` interface with OpenAI/Ollama/Anthropic implementations, SSE streaming with token-by-token display, `AI_PATCH` postMessage to runtime for live preview, undo-integrated via manual history snapshot before `store.setPage()`; schema context serialized by Nuxt proxy and embedded in LLM system prompt; `POST /api/ai/prompt` on build server; env vars: `LLM_PROVIDER`, `LLM_BASE_URL`, `LLM_MODEL`, `LLM_API_KEY`
 - [x] **Voice Input + Text-to-Voice hook** — WebSocket transcription server (`ws` package) on `/transcription` path sharing port 2999; `TranscriptionAdapter` interface with `WhisperAdapter` (POST /asr multipart, faster-whisper / whisper.cpp compatible) and `MockWhisperAdapter` (dev fallback when `WHISPER_BASE_URL` unset); WS protocol: `VOICE_CHUNK` / `VOICE_END` client→server, `TRANSCRIPT_TOKEN` / `TRANSCRIPT_DONE` / `TRANSCRIPT_ERROR` server→client; `useVoiceInput()` composable — listens for `VOICE_INPUT` postMessages from native layer, forwards audio chunks via WS, accumulates `liveTranscript` ref, populates `aiPrompt` on completion; mic button in `AiPromptPanel` (44×44 px, pulsing red ring while listening, ghost placeholder text shows live transcript); `AI_VOICE_RESPONSE` postMessage sent by `useAiEditor` after SSE completes — forwarded by runtime to native container for TTS (no web audio playback); env vars: `WHISPER_BASE_URL`, `NUXT_PUBLIC_WS_URL`; native TTS integration pending (separate phase — see Android/iOS TODO comments)
+- [x] **Collaborative Editing** — Yjs CRDT sync via y-websocket; PostgreSQL persistence (`sites` + `site_versions` tables, JSONB + collab_state BYTEA); `setupCollaborationServer` on port 2999 (`/collaboration/*` path, noServer WebSocket routing alongside `/transcription`); `useCollaboration()` composable — bidirectional Pinia ↔ Y.Map sync (100 ms debounce, `_suppressSync` flag + `nextTick` loop prevention); presence via y-websocket awareness protocol; `UserPresence` type + `presenceColorFromId()` in `@cms/contracts`; `PresenceBar.vue` — avatar circles (HSL color, initials, pulsing ring on active edit, +N overflow, "you" chip); `PRESENCE_UPDATE` EditorMessage for editor→runtime iframe; `SelectableBlock` peer prop — 3 px HSL left border with CSS transition; runtime `peerMap` tracking presence per block; `useBlockSelection` non-blocking conflict warning toast (3 s auto-dismiss); 6 unit tests (node:test) covering color determinism, two-client sync, concurrent merge, encoding round-trip; env var: `DATABASE_URL`; node-build-server tsconfig upgraded to `moduleResolution: "bundler"` for sub-path exports
 
 ---
 
@@ -322,12 +323,16 @@ All sub-tasks done. `LayoutHeader` + `LayoutFooter` block types, schemas, compon
 - Pending: UI for browsing and rolling back versions (requires a version history panel in `index.vue`)
 - Pending: CSS versioning per snapshot (currently only `site.json` is snapshotted, not the built static assets)
 
-### 9. Collaborative Editing
-- Multiple team members can edit the same site simultaneously
-- Architecture options to evaluate: OT (Operational Transformation), CRDT (e.g. Yjs), or lock-based editing
-- Presence indicators (who is editing which block)
-- Conflict resolution strategy TBD
-- **Prerequisite:** Move from file system to a real database (Postgres/MongoDB + WebSockets)
+### 9. ✅ Collaborative Editing — COMPLETE
+- ✅ **Postgres persistence** — `db/client.ts` (pg Pool), `db/migrate.ts` (`sites` + `site_versions` JSONB tables); `readSiteFull` / `saveSiteFull` / `versionManager` rewritten with Postgres primary + filesystem fallback; `npm run migrate` creates tables; env var: `DATABASE_URL`
+- ✅ **Yjs collaboration server** — `collaboration/yjsServer.ts` implements full y-websocket binary protocol (MESSAGE_SYNC + MESSAGE_AWARENESS); shares port 2999 via `noServer: true` + manual `httpServer.on('upgrade')` routing; per-siteId Y.Doc + Awareness in memory; debounce-persists collab_state BYTEA to Postgres (500 ms)
+- ✅ **`UserPresence` type** + `presenceColorFromId()` in `packages/contracts/presence.ts`; exported from `@cms/contracts`; `PRESENCE_UPDATE` added to `EditorMessage` union
+- ✅ **`useCollaboration()` composable** — WebsocketProvider to `${NUXT_PUBLIC_WS_URL}/collaboration/${siteId}`; seeds Y.Doc from Pinia on connect; bidirectional sync with `_suppressSync` + `nextTick` loop prevention; awareness tracks `selectedBlockId` / `selectedLayoutBlockId`; pushes `PRESENCE_UPDATE` postMessage to runtime iframe on awareness change
+- ✅ **`PresenceBar.vue`** — avatar circles (28 px, HSL color, first initial), pulsing ring when editing, tooltip, +N overflow, dashed "you" chip; connected/disconnected dot
+- ✅ **Peer block highlight** — `SelectableBlock` accepts `peer?: { color, displayName }` prop; 3 px left border with `--peer-color` CSS variable + transition; runtime builds `peerMap` from `PRESENCE_UPDATE` payload
+- ✅ **Conflict warning** — `useBlockSelection` checks peers before `store.selectBlock()`; non-blocking `conflictWarning` toast ref with 3 s auto-dismiss shown in `index.vue`
+- ✅ **6 unit tests** in `node-build-server/src/__tests__/collaboration.test.ts` — color determinism, two-client sync, concurrent merge, encoding round-trip
+- ✅ **tsconfig fix** — `moduleResolution: "bundler"` (TS 5.0+) to resolve `y-protocols/sync`, `lib0/encoding` sub-path exports
 
 ### 10. Content Security Policy (CSP)
 - All published pages must include CSP headers

@@ -1,5 +1,6 @@
 import { writeFile, mkdir } from 'fs/promises'
 import { resolve, join } from 'path'
+import { pool } from './db/client'
 
 interface Page {
   id: string
@@ -23,12 +24,14 @@ interface PerPageCss {
 }
 
 /**
- * Persist the full Site JSON and explode per-page files for the runtime.
+ * Persist the full Site and explode per-page files for the runtime.
  *
- * Writes:
- *   runtime_storage/{siteId}/site.json          — authoritative document
- *   runtime_storage/{siteId}/data/pages/*.json  — one per page (for runtime SSR + Nuxt generate)
- *   runtime_storage/{siteId}/generated-css/*.css — per-page CSS files
+ * Site JSON:
+ *   Primary:  Upserted into Postgres `sites` table (when DATABASE_URL is set).
+ *   Fallback: Written to `runtime_storage/{siteId}/site.json`.
+ *
+ * Per-page JSON + CSS files are always written to disk so the Nuxt SSR runtime
+ * can serve them statically without querying Postgres.
  */
 export async function saveSiteFull(
   siteId: string,
@@ -44,12 +47,22 @@ export async function saveSiteFull(
   await mkdir(jsonDir, { recursive: true })
   await mkdir(cssDir,  { recursive: true })
 
-  // 1. Write authoritative site.json
-  await writeFile(
-    join(baseDir, 'site.json'),
-    JSON.stringify(site, null, 2),
-    'utf-8'
-  )
+  // 1. Persist site JSON (Postgres primary, filesystem fallback)
+  if (pool) {
+    await pool.query(
+      `INSERT INTO sites (id, data)
+       VALUES ($1, $2)
+       ON CONFLICT (id) DO UPDATE SET data = $2, updated_at = NOW()`,
+      [siteId, JSON.stringify(site)]
+    )
+  } else {
+    // Filesystem fallback
+    await writeFile(
+      join(baseDir, 'site.json'),
+      JSON.stringify(site, null, 2),
+      'utf-8'
+    )
+  }
 
   // 2. Explode per-page JSON files (used by runtime [slug].vue + Nuxt generate)
   for (const page of site.pages) {

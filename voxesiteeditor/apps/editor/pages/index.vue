@@ -5,12 +5,15 @@ import SelectableBlock from '@cms/ui/wrappers/SelectableBlock.vue'
 import BlockEditorPanel from '../components/BlockEditorPanel.vue'
 import AiPromptPanel from '../components/AiPromptPanel.vue'
 import GeneratePageModal from '../components/GeneratePageModal.vue'
+import PresenceBar from '../components/PresenceBar.vue'
 import { usePageStore } from '../stores/usePageStore'
 import { usePageEditor } from '../composables/usePageEditor'
 import { useLayoutEditor } from '../composables/useLayoutEditor'
 import { useDragDrop } from '../composables/useDragDrop'
 import { useAiEditor } from '../composables/useAiEditor'
 import { usePageGenerator } from '../composables/usePageGenerator'
+import { useCollaboration } from '../composables/useCollaboration'
+import { useBlockSelection } from '../composables/useBlockSelection'
 
 const store = usePageStore()
 const { savePage, publishSite } = usePageEditor()
@@ -26,6 +29,13 @@ const {
 const { draggableBlocks, sortableOptions } = useDragDrop()
 const { isAiPanelOpen, toggleAiPanel } = useAiEditor()
 const { openModal: openGenerateModal } = usePageGenerator()
+
+// ── Collaboration — single call, shares the iframe ref with usePageEditor ────
+const previewFrame = useTemplateRef<HTMLIFrameElement>('previewFrame')
+const { isConnected, connectedUsers, localUser } = useCollaboration('demosite', previewFrame)
+
+// Block selection with conflict-warning support
+const { selectBlock: selectBlockWithWarning, conflictWarning } = useBlockSelection({ connectedUsers })
 
 function addNewPage() {
   store.addPage({
@@ -66,6 +76,14 @@ function addNewPage() {
         @click="openGenerateModal()"
       >⚡</button>
 
+      <!-- Presence bar — connected users (right-aligned, before AI toggle) -->
+      <PresenceBar
+        class="presence-bar-tab"
+        :users="connectedUsers"
+        :local-user="localUser"
+        :is-connected="isConnected"
+      />
+
       <!-- AI toggle — right-aligned -->
       <button
         class="ai-toggle-btn"
@@ -74,6 +92,13 @@ function addNewPage() {
         @click="toggleAiPanel"
       >✨ IA</button>
     </div>
+
+    <!-- Conflict warning toast — non-blocking informational message -->
+    <Transition name="conflict-toast">
+      <div v-if="conflictWarning" class="conflict-toast" role="status" aria-live="polite">
+        ⚠️ {{ conflictWarning }}
+      </div>
+    </Transition>
 
     <!-- ── Main content row: sidebar + iframe ──────────────────────────────── -->
     <div class="editor-body">
@@ -150,7 +175,7 @@ function addNewPage() {
               <SelectableBlock
                 :blockId="block.id"
                 :enabled="true"
-                @select="store.selectBlock"
+                @select="selectBlockWithWarning"
               >
                 <span class="block-list__label">{{ block.type }}</span>
               </SelectableBlock>
@@ -260,9 +285,16 @@ function addNewPage() {
   border-color: #5858c8;
 }
 
-/* AI toggle — push to the right end of the tab bar */
-.ai-toggle-btn {
+/* Presence bar — no border, transparent background so it sits inline */
+.presence-bar-tab {
   margin-left: auto;
+  background: transparent;
+  border: none;
+  padding: 0;
+}
+
+/* AI toggle — comes after the presence bar */
+.ai-toggle-btn {
   background: #1a1a2e;
   color: #9090d0;
   border-color: #2e2e50;
@@ -272,6 +304,33 @@ function addNewPage() {
   background: #5858c8 !important;
   color: #fff !important;
   border-color: #5858c8 !important;
+}
+
+/* Conflict warning toast */
+.conflict-toast {
+  position: fixed;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.8);
+  color: #fff;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  white-space: nowrap;
+  z-index: 9999;
+  pointer-events: none;
+}
+
+.conflict-toast-enter-active,
+.conflict-toast-leave-active {
+  transition: opacity 0.2s, transform 0.2s;
+}
+
+.conflict-toast-enter-from,
+.conflict-toast-leave-to {
+  opacity: 0;
+  transform: translateX(-50%) translateY(8px);
 }
 
 /* ── Body row: sidebar + preview ────────────────────────────────────────────── */

@@ -1,11 +1,12 @@
 import type { Page, SiteLayout } from './page'
+import type { UserPresence } from './presence'
 
 /**
  * All messages exchanged between the editor (parent window)
  * and the runtime iframe, and between the native layer and the editor WebView.
  *
  * Direction:
- *   Editor → Runtime : PAGE_UPDATE, LAYOUT_UPDATE, AI_PATCH, AI_VOICE_RESPONSE
+ *   Editor → Runtime : PAGE_UPDATE, LAYOUT_UPDATE, AI_PATCH, AI_VOICE_RESPONSE, PRESENCE_UPDATE
  *   Runtime → Editor : BLOCK_SELECT, LAYOUT_BLOCK_SELECT
  *   Native → Editor  : VOICE_INPUT (audio chunks from native mic capture)
  *   Editor → Native  : AI_VOICE_RESPONSE (forwarded by runtime for TTS)
@@ -16,6 +17,9 @@ export type EditorMessage =
   | { type: 'AI_PATCH'; payload: Partial<Page> }
   | { type: 'LAYOUT_UPDATE'; payload: SiteLayout }
   | { type: 'LAYOUT_BLOCK_SELECT'; payload: { slot: 'header' | 'footer' | null } }
+  // Presence — editor broadcasts connected-users' awareness to the runtime iframe
+  // so SelectableBlock can highlight blocks selected by other users.
+  | { type: 'PRESENCE_UPDATE'; payload: UserPresence[] }
   // Voice input — sent from the native layer (Android/iOS) to the editor WebView.
   // The native layer captures microphone audio and sends base64-encoded chunks.
   | { type: 'VOICE_INPUT'; payload: { audio: string; mimeType: string } }
@@ -37,6 +41,7 @@ export function isEditorMessage(data: unknown): data is EditorMessage {
       'AI_PATCH',
       'LAYOUT_UPDATE',
       'LAYOUT_BLOCK_SELECT',
+      'PRESENCE_UPDATE',
       'VOICE_INPUT',
       'VOICE_TRANSCRIPT',
       'AI_VOICE_RESPONSE'

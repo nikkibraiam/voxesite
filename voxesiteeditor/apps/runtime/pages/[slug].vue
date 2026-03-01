@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue'
-import type { Page, SiteLayout } from '@cms/contracts'
+import type { Page, SiteLayout, UserPresence } from '@cms/contracts'
 import { isEditorMessage, sendEditorMessage } from '@cms/contracts'
 import { renderBlock, renderLayoutBlock } from '@cms/ui'
 import { SelectableBlock } from '@cms/ui/wrappers'
@@ -27,6 +27,16 @@ const layout = ref<SiteLayout>(siteData?.layout ?? {})
 
 // ─── Editor detection ────────────────────────────────────────────────────────
 const isEditor = ref(false)
+
+// ─── Presence — remote peers' awareness data ─────────────────────────────────
+// blockId → peer info (only the first peer per block to keep it simple)
+const peerMap = ref<Map<string, UserPresence>>(new Map())
+
+/** Lookup helper used in the template for per-block peer prop. */
+function peerForBlock(blockId: string): { color: string; displayName: string } | null {
+  const peer = peerMap.value.get(blockId)
+  return peer ? { color: peer.color, displayName: peer.displayName } : null
+}
 
 // ─── Dynamic CSS ─────────────────────────────────────────────────────────────
 const dynamicStyleTag = ref<HTMLStyleElement | null>(null)
@@ -120,6 +130,19 @@ onMounted(() => {
       }
     }
 
+    if (event.data.type === 'PRESENCE_UPDATE') {
+      // Rebuild blockId → first-peer map from remote users' awareness state.
+      // Only page-block selections are shown here (layout slot highlights are
+      // handled via the editor sidebar, not the runtime).
+      const newMap = new Map<string, UserPresence>()
+      for (const user of event.data.payload) {
+        if (user.selectedBlockId && !newMap.has(user.selectedBlockId)) {
+          newMap.set(user.selectedBlockId, user)
+        }
+      }
+      peerMap.value = newMap
+    }
+
     if (event.data.type === 'AI_VOICE_RESPONSE') {
       // The editor has finished an AI response and is signalling the native layer to speak it.
       // The runtime forwards this message to its parent (the native WebView container).
@@ -156,7 +179,13 @@ onMounted(() => {
 
   <!-- Page blocks -->
   <template v-for="block in page?.blocks || []" :key="block.id">
-    <SelectableBlock v-if="isEditor" :block-id="block.id" enabled @select="onBlockSelect">
+    <SelectableBlock
+      v-if="isEditor"
+      :block-id="block.id"
+      enabled
+      :peer="peerForBlock(block.id)"
+      @select="onBlockSelect"
+    >
       <component :is="renderBlock(block)" v-bind="block.props" />
     </SelectableBlock>
 

@@ -16,6 +16,8 @@ import { fetchUrlContent } from './pageGenerator/urlFetcher'
 import { prepareScreenshot } from './pageGenerator/screenshotHandler'
 import { sanitizeHtml } from './pageGenerator/htmlSanitizer'
 import { generatePage } from './pageGenerator/pageGeneratorService'
+import { setupCollaborationServer } from './collaboration/yjsServer'
+import { pool } from './db/client'
 
 const app = express()
 
@@ -373,6 +375,37 @@ app.use('/assets', express.static('./public_builds'))
 
 const httpServer = createServer(app)
 
+// ─── WebSocket servers (noServer mode — upgrade routing done manually) ────────
+//
+// Using noServer:true for both WS servers lets us route upgrade requests by
+// path prefix, which the built-in `path` option doesn't support (exact match).
+//
+//   /transcription        — voice transcription (JSON protocol)
+//   /collaboration/{id}   — Yjs collaborative editing (binary y-websocket protocol)
+
+const transcriptionWss = new WebSocketServer({ noServer: true })
+const collabWss        = new WebSocketServer({ noServer: true })
+
+httpServer.on('upgrade', (request, socket, head) => {
+  const pathname = new URL(request.url ?? '/', 'http://localhost').pathname
+
+  if (pathname === '/transcription') {
+    transcriptionWss.handleUpgrade(request, socket, head, (ws) => {
+      transcriptionWss.emit('connection', ws, request)
+    })
+  } else if (pathname.startsWith('/collaboration')) {
+    collabWss.handleUpgrade(request, socket, head, (ws) => {
+      collabWss.emit('connection', ws, request)
+    })
+  } else {
+    socket.destroy()
+  }
+})
+
+// ─── Yjs collaboration server ─────────────────────────────────────────────────
+
+setupCollaborationServer(collabWss, pool)
+
 // ─── WebSocket transcription server (/transcription) ─────────────────────────
 //
 // Protocol (JSON over WebSocket):
@@ -386,9 +419,7 @@ const httpServer = createServer(app)
 //     { type: "TRANSCRIPT_DONE",   payload: { fullText: "Hello world" } }
 //     { type: "TRANSCRIPT_ERROR",  payload: { message: "..." } }
 
-const wss = new WebSocketServer({ server: httpServer, path: '/transcription' })
-
-wss.on('connection', (socket: WsSocket) => {
+transcriptionWss.on('connection', (socket: WsSocket) => {
   console.log('[WS /transcription] Client connected')
 
   // Buffer for accumulated audio chunks from this session
@@ -466,7 +497,7 @@ wss.on('connection', (socket: WsSocket) => {
   socket.on('error', (err) => {
     console.error('[WS /transcription] Socket error:', err)
   })
-})
+}) // end transcriptionWss.on('connection')
 
 const PORT = process.env.PORT || 2999
 httpServer.listen(PORT, () =>

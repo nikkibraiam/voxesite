@@ -2,6 +2,8 @@
 const props = defineProps<{
   blockId: string
   enabled?: boolean
+  /** When set, renders a coloured left-border to indicate a remote peer's selection. */
+  peer?: { color: string; displayName: string } | null
 }>()
 
 const emit = defineEmits<{
@@ -18,6 +20,9 @@ function onClick() {
 <template>
   <div
     class="selectable-block"
+    :class="{ 'selectable-block--peer': !!peer }"
+    :style="peer ? { '--peer-color': peer.color } : {}"
+    :title="peer ? `${peer.displayName} está editando este bloque` : undefined"
     @click.stop="onClick"
   >
     <!--
@@ -56,6 +61,17 @@ function onClick() {
 .selectable-block:hover {
   outline: 2px solid rgba(59, 130, 246, 0.8);
   cursor: pointer;
+}
+
+/* ── Peer highlight — coloured left border when a remote user has this block ── */
+
+.selectable-block--peer {
+  border-left: 3px solid var(--peer-color, #888);
+  transition: border-color 0.2s ease;
+}
+
+.selectable-block--peer:not(:hover) {
+  outline: none;
 }
 
 /* ── Drag handle ─────────────────────────────────────────────────────────── */
