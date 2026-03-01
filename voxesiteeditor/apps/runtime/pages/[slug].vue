@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue'
-import type { Page, SiteLayout, UserPresence } from '@cms/contracts'
+import type { Page, Site, SiteLayout, UserPresence } from '@cms/contracts'
 import { isEditorMessage, sendEditorMessage } from '@cms/contracts'
 import { renderBlock, renderLayoutBlock } from '@cms/ui'
 import { SelectableBlock } from '@cms/ui/wrappers'
@@ -18,6 +18,9 @@ const { data, error } : any = await useFetch(
 )
 
 const siteData = data.value?.data
+
+/** Full site document — needed to resolve Composite block definitions at render time. */
+const site = ref<Site | null>(siteData ?? null)
 
 const page = ref<Page | null>(
   siteData?.pages?.find((p: Page) => p.slug === slug) ?? null
@@ -132,6 +135,11 @@ onMounted(() => {
 
     if (event.data.type === 'PAGE_UPDATE') {
       page.value = event.data.payload
+      // Keep site.pages in sync so composite definitions can be resolved during render
+      if (site.value) {
+        const idx = site.value.pages.findIndex(p => p.id === event.data.payload.id)
+        if (idx !== -1) site.value.pages[idx] = event.data.payload
+      }
       regenerateStyles(event.data.payload)
       styleVersion.value = Date.now()
     }
@@ -207,10 +215,10 @@ onMounted(() => {
       :peer="peerForBlock(block.id)"
       @select="onBlockSelect"
     >
-      <component :is="renderBlock(block)" v-bind="block.props" />
+      <component :is="renderBlock(block, { site: site ?? undefined })" v-bind="block.props" />
     </SelectableBlock>
 
-    <component v-else :is="renderBlock(block)" v-bind="block.props" />
+    <component v-else :is="renderBlock(block, { site: site ?? undefined })" v-bind="block.props" />
   </template>
 
   <!-- Footer layout slot -->

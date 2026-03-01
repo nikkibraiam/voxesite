@@ -1,5 +1,6 @@
 import { h, defineAsyncComponent } from 'vue'
-import type { BaseBlock, SiteLayout, LayoutBlock } from '@cms/contracts'
+import type { VNode } from 'vue'
+import type { BaseBlock, Site, SiteLayout, LayoutBlock } from '@cms/contracts'
 
 const registry: Record<string, ReturnType<typeof defineAsyncComponent>> = {
   TextBlock: defineAsyncComponent(() => import('../components/TextBlock.vue')),
@@ -21,9 +22,57 @@ export interface RenderOptions {
    * for future block types that need dynamic inline styles.
    */
   nonce?: string
+
+  /**
+   * Full site document — required to resolve Composite block definitions.
+   * Pass this whenever rendering page blocks so composite blocks can look up
+   * their `CompositeBlockDefinition` from `site.customComponents`.
+   */
+  site?: Site
 }
 
-export function renderBlock(block: BaseBlock<string, any>, options: RenderOptions = {}) {
+export function renderBlock(block: BaseBlock<string, any>, options: RenderOptions = {}): VNode | null {
+  // ── Composite block resolution ──────────────────────────────────────────────
+  if (block.type === 'Composite') {
+    const def = options.site?.customComponents?.find(c => c.id === block.props.definitionId)
+
+    if (!def) {
+      return h(
+        'div',
+        {
+          class: 'composite-missing',
+          style: 'border: 2px dashed red; padding: 16px; color: red; font-family: monospace;',
+          'data-definition-id': block.props.definitionId
+        },
+        `⚠ Missing composite definition: ${block.props.definitionId}`
+      )
+    }
+
+    const layoutStyle: Record<string, string> = { display: 'flex' }
+    if (def.layout === 'stack') layoutStyle.flexDirection = 'column'
+    if (def.layout === 'flex') layoutStyle.flexDirection = 'row'
+    if (def.layout === 'grid') {
+      layoutStyle.display = 'grid'
+      if (def.layoutOptions?.columns) {
+        layoutStyle.gridTemplateColumns = `repeat(${def.layoutOptions.columns}, 1fr)`
+      }
+    }
+    if (def.layoutOptions?.gap) layoutStyle.gap = def.layoutOptions.gap
+
+    return h(
+      'div',
+      { class: `composite composite-${def.id}`, 'data-layout': def.layout, style: layoutStyle },
+      def.children.map(child => {
+        const override = block.props.overrides?.[child.id]
+        const merged: BaseBlock<string, any> = override
+          ? { ...child, props: { ...child.props, ...override.props } }
+          : child
+        return renderBlock(merged, options)
+      })
+    )
+  }
+
+  // ── Standard registry lookup ─────────────────────────────────────────────────
   const Component = registry[block.type]
 
   if (!Component) {

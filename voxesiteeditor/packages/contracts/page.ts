@@ -1,5 +1,6 @@
 import type { HeroBlock } from './blocks/hero'
 import type { TextBlock } from './blocks/text'
+import type { CompositeBlockDefinition } from './blocks/composite'
 
 export type BlockStyles = {
   [selector: string]: {
@@ -73,4 +74,5 @@ export interface Site {
   pages: Page[]
   layout: SiteLayout
   publishedAt?: string  // ISO 8601 — set on each publish
+  customComponents?: CompositeBlockDefinition[]  // per-site reusable composite blocks
 }

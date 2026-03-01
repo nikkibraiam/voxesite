@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed, toRaw } from 'vue'
-import type { Page, Site, BaseBlock, SiteLayout, LayoutBlock } from '@cms/contracts'
+import type { Page, Site, BaseBlock, SiteLayout, LayoutBlock, CompositeBlockDefinition } from '@cms/contracts'
 import { BlockSchemas, LayoutSchemas } from '@cms/ui/schemas'
 
 const MAX_HISTORY = 50
@@ -402,6 +402,116 @@ export const usePageStore = defineStore('page', () => {
     _replacePage(future.value.pop()!)
   }
 
+  // ─── Composite block actions ─────────────────────────────────────────────────
+
+  /**
+   * Group a set of existing blocks into a reusable CompositeBlock.
+   *
+   * 1. Collects the blocks matching `blockIds` (in page order)
+   * 2. Creates a CompositeBlockDefinition and pushes it to site.customComponents
+   * 3. Replaces the first matched block in the page with a Composite block
+   * 4. Removes the remaining matched blocks from the page
+   * 5. Snapshots for undo
+   */
+  function createCompositeBlock(blockIds: string[], name: string) {
+    if (!currentPage.value || !site.value) return
+    if (blockIds.length < 2) return
+
+    const updatedPage: Page = structuredClone(toRaw(currentPage.value))
+
+    // Collect children in page order (not blockIds order)
+    const children = updatedPage.blocks.filter(b => blockIds.includes(b.id))
+    if (children.length < 2) return
+
+    const def: CompositeBlockDefinition = {
+      id: crypto.randomUUID(),
+      name,
+      children,
+      layout: 'stack'
+    }
+
+    // Initialise customComponents if absent
+    if (!site.value.customComponents) site.value.customComponents = []
+    site.value.customComponents.push(def)
+
+    const compositeBlock: BaseBlock<string, any> = {
+      id: crypto.randomUUID(),
+      type: 'Composite',
+      props: { definitionId: def.id, overrides: {} }
+    }
+
+    // Find the index of the first matched block in page order
+    const firstIdx = updatedPage.blocks.findIndex(b => blockIds.includes(b.id))
+
+    // Remove all matched blocks, then insert the composite at the first position
+    updatedPage.blocks = updatedPage.blocks.filter(b => !blockIds.includes(b.id))
+    updatedPage.blocks.splice(firstIdx, 0, compositeBlock)
+
+    _snapshot()
+    selectedBlockId.value = compositeBlock.id
+    _replacePage(updatedPage)
+  }
+
+  /**
+   * Replace an existing CompositeBlockDefinition in site.customComponents by id.
+   * Snapshots the current page for undo (definition changes affect all instances).
+   */
+  function updateCompositeDefinition(def: CompositeBlockDefinition) {
+    if (!site.value) return
+    const idx = (site.value.customComponents ?? []).findIndex(c => c.id === def.id)
+    if (idx === -1) return
+    _snapshot()
+    site.value.customComponents![idx] = structuredClone(def)
+  }
+
+  /**
+   * Remove a CompositeBlockDefinition from site.customComponents by id.
+   * Instances that reference it will render the missing-definition placeholder.
+   */
+  function deleteCompositeDefinition(id: string) {
+    if (!site.value?.customComponents) return
+    _snapshot()
+    site.value.customComponents = site.value.customComponents.filter(c => c.id !== id)
+  }
+
+  /**
+   * Merge an override onto a specific child block within a Composite instance.
+   * Uses snapshot:false for live preview (called on every Tweakpane change).
+   */
+  function updateCompositeOverride(
+    blockId: string,
+    childId: string,
+    override: Partial<BaseBlock<string, any>>
+  ) {
+    if (!currentPage.value || !site.value) return
+    const updatedPage: Page = structuredClone(toRaw(currentPage.value))
+    const block = updatedPage.blocks.find(b => b.id === blockId)
+    if (!block || block.type !== 'Composite') return
+
+    if (!block.props.overrides) block.props.overrides = {}
+    block.props.overrides[childId] = {
+      ...block.props.overrides[childId],
+      ...override
+    }
+
+    _replacePage(updatedPage)
+  }
+
+  /**
+   * Ungroup a Composite block — replace it with its definition children at the same position.
+   */
+  function replaceBlockWithChildren(blockId: string, children: BaseBlock<string, any>[]) {
+    if (!currentPage.value || !site.value) return
+    const updatedPage: Page = structuredClone(toRaw(currentPage.value))
+    const idx = updatedPage.blocks.findIndex(b => b.id === blockId)
+    if (idx === -1) return
+
+    _snapshot()
+    updatedPage.blocks.splice(idx, 1, ...children)
+    if (selectedBlockId.value === blockId) selectedBlockId.value = null
+    _replacePage(updatedPage)
+  }
+
   // ─── Undo / Redo (layout) ───────────────────────────────────────────────────
 
   /** Restore the previous layout state from the layout undo stack. */
@@ -452,6 +562,12 @@ export const usePageStore = defineStore('page', () => {
     removeBlock,
     reorderBlocks,
     selectBlock,
+    // composite block actions
+    createCompositeBlock,
+    updateCompositeDefinition,
+    deleteCompositeDefinition,
+    updateCompositeOverride,
+    replaceBlockWithChildren,
     // layout block selection
     selectLayoutBlock,
     // layout actions

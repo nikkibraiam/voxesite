@@ -2,7 +2,7 @@
 import { ref, watch, computed, toRaw, onMounted, onUnmounted, nextTick } from 'vue'
 import { Pane } from 'tweakpane'
 import { BlockSchemas, LayoutSchemas } from '@cms/ui/schemas'
-import type { BaseBlock } from '@cms/contracts'
+import type { BaseBlock, CompositeBlockDefinition } from '@cms/contracts'
 import { usePageStore } from '../stores/usePageStore'
 import { useBlockEditorPanel } from '../composables/useBlockEditorPanel'
 
@@ -12,6 +12,34 @@ const { isPanelOpen } = useBlockEditorPanel()
 const paneContainer = ref<HTMLDivElement | null>(null)
 const draft = ref<BaseBlock<string, any> | null>(null)
 const draftContext = ref<'page' | 'layout'>('page')
+
+// ── Composite block state ─────────────────────────────────────────────────────
+
+/** The resolved definition when draft is a Composite block. */
+const compositeDef = computed<CompositeBlockDefinition | null>(() => {
+  if (!draft.value || draft.value.type !== 'Composite') return null
+  return store.site?.customComponents?.find(c => c.id === draft.value!.props.definitionId) ?? null
+})
+
+/** ID of the child block currently being edited (within a composite). */
+const selectedChildId = ref<string | null>(null)
+
+/** The merged child block (definition props + instance overrides) for the selected child. */
+const selectedChild = computed<BaseBlock<string, any> | null>(() => {
+  if (!compositeDef.value || !selectedChildId.value || !draft.value) return null
+  const child = compositeDef.value.children.find(c => c.id === selectedChildId.value)
+  if (!child) return null
+  const override = draft.value.props.overrides?.[child.id]
+  return override
+    ? { ...child, props: { ...child.props, ...override.props } }
+    : child
+})
+
+/** Schema for the selected child's block type. */
+const childSchema = computed(() => {
+  if (!selectedChild.value) return null
+  return BlockSchemas[selectedChild.value.type] ?? null
+})
 
 /**
  * JSON field textarea values, keyed by field.key.
@@ -26,6 +54,7 @@ let pane: Pane | null = null
 
 const schema = computed(() => {
   if (!draft.value) return null
+  if (draft.value.type === 'Composite') return null  // composite has its own panel
   return LayoutSchemas[draft.value.type] ?? BlockSchemas[draft.value.type] ?? null
 })
 
@@ -37,11 +66,20 @@ const textareaFields = computed(() => {
   )
 })
 
+/** Textarea fields for the selected child block in composite mode. */
+const childTextareaFields = computed(() => {
+  if (!childSchema.value) return []
+  return (childSchema.value.content.fields as any[]).filter(
+    (f: any) => f.type === 'json' || f.type === 'css'
+  )
+})
+
 // ─── Selection watch — rebuild draft + Tweakpane pane ───────────────────────
 
 watch(
   () => [store.selectedBlockId, store.selectedLayoutBlockId] as const,
   ([blockId, layoutSlot]) => {
+    selectedChildId.value = null
     if (layoutSlot) {
       draftContext.value = 'layout'
       const lb = store.selectedLayoutBlock
@@ -58,7 +96,12 @@ watch(
   { immediate: true }
 )
 
-// ─── Tweakpane lifecycle ─────────────────────────────────────────────────────
+// When the selected child changes, rebuild the child pane
+watch(selectedChildId, () => {
+  nextTick(() => rebuildChildPane())
+})
+
+// ─── Tweakpane lifecycle (regular blocks) ────────────────────────────────────
 
 function rebuildPane() {
   if (pane) {
@@ -84,16 +127,13 @@ function rebuildPane() {
   const contentFolder = pane.addFolder({ title: 'Contenido', expanded: true })
 
   for (const field of schema.value.content.fields as any[]) {
-    // json and css are rendered as plain <textarea> elements below the pane
     if (field.type === 'json' || field.type === 'css') continue
 
-    // Ensure props have a safe initial value for Tweakpane
     if (draft.value.props[field.key] === undefined || draft.value.props[field.key] === null) {
       if (field.type === 'boolean') draft.value.props[field.key] = false
       else if (field.type === 'color') draft.value.props[field.key] = '#000000'
       else draft.value.props[field.key] = ''
     }
-    // Color must be a non-empty hex string
     if (field.type === 'color' && !draft.value.props[field.key]) {
       draft.value.props[field.key] = '#000000'
     }
@@ -117,7 +157,6 @@ function rebuildPane() {
         const cssProp: string = field.cssProperty
 
         if (!draft.value.styles[selector]) draft.value.styles[selector] = {}
-        // Ensure a valid initial value exists
         if (!draft.value.styles[selector][cssProp]) {
           draft.value.styles[selector][cssProp] = field.type === 'color' ? '#000000' : ''
         }
@@ -133,7 +172,74 @@ function rebuildPane() {
   }
 }
 
-// ─── Store dispatch helpers ──────────────────────────────────────────────────
+// ─── Tweakpane lifecycle (composite child overrides) ─────────────────────────
+
+/** Separate pane instance for child override editing. */
+let childPane: Pane | null = null
+const childPaneContainer = ref<HTMLDivElement | null>(null)
+
+/** Local mutable copy of the child props being edited (for Tweakpane binding). */
+const draftChildProps = ref<Record<string, any>>({})
+
+function rebuildChildPane() {
+  if (childPane) {
+    childPane.dispose()
+    childPane = null
+  }
+
+  if (!selectedChild.value || !childSchema.value || !childPaneContainer.value) return
+
+  // Clone child props so Tweakpane can mutate them
+  draftChildProps.value = structuredClone(selectedChild.value.props)
+
+  jsonFieldValues.value = {}
+  for (const field of childSchema.value.content.fields as any[]) {
+    if (field.type === 'json') {
+      const v = draftChildProps.value[field.key]
+      jsonFieldValues.value[field.key] =
+        v == null ? '' : typeof v === 'string' ? v : JSON.stringify(v, null, 2)
+    }
+  }
+
+  childPane = new Pane({ container: childPaneContainer.value })
+  const folder = childPane.addFolder({ title: 'Overrides', expanded: true })
+
+  for (const field of childSchema.value.content.fields as any[]) {
+    if (field.type === 'json' || field.type === 'css') continue
+
+    if (draftChildProps.value[field.key] === undefined || draftChildProps.value[field.key] === null) {
+      if (field.type === 'boolean') draftChildProps.value[field.key] = false
+      else if (field.type === 'color') draftChildProps.value[field.key] = '#000000'
+      else draftChildProps.value[field.key] = ''
+    }
+
+    const params: Record<string, unknown> = { label: field.label }
+    if (field.type === 'color') params.view = 'color'
+
+    const binding = folder.addBinding(draftChildProps.value, field.key, params)
+    binding.on('change', () => _dispatchChildOverride())
+  }
+}
+
+function _dispatchChildOverride() {
+  if (!draft.value || !selectedChildId.value) return
+  store.updateCompositeOverride(draft.value.id, selectedChildId.value, {
+    props: structuredClone(draftChildProps.value)
+  })
+}
+
+function onChildJsonInput(key: string, event: Event) {
+  const raw = (event.target as HTMLTextAreaElement).value
+  jsonFieldValues.value[key] = raw
+  try {
+    draftChildProps.value[key] = JSON.parse(raw)
+  } catch {
+    draftChildProps.value[key] = raw
+  }
+  _dispatchChildOverride()
+}
+
+// ─── Store dispatch helpers (regular blocks) ──────────────────────────────────
 
 function _dispatchLive() {
   if (!draft.value) return
@@ -177,10 +283,6 @@ function onJsonInput(key: string, event: Event) {
   _dispatchLive()
 }
 
-/**
- * CSS fields bind to the block root (draft.customCss) or draft.props[key]
- * depending on the field key. The existing modal uses `draft[field.key]`.
- */
 function onCssInput(key: string, event: Event) {
   if (!draft.value) return
   const raw = (event.target as HTMLTextAreaElement).value
@@ -193,10 +295,19 @@ function getCssValue(key: string): string {
   return (draft.value as Record<string, any>)[key] ?? ''
 }
 
+// ─── Ungroup ─────────────────────────────────────────────────────────────────
+
+function ungroupCurrent() {
+  if (!draft.value || draft.value.type !== 'Composite' || !compositeDef.value) return
+  store.replaceBlockWithChildren(draft.value.id, compositeDef.value.children)
+}
+
 // ─── Panel close ────────────────────────────────────────────────────────────
 
 function close() {
-  _dispatchCommit()
+  if (draft.value?.type !== 'Composite') {
+    _dispatchCommit()
+  }
   if (draftContext.value === 'layout') {
     store.selectLayoutBlock(null)
   } else {
@@ -207,7 +318,13 @@ function close() {
 // ─── Keyboard ───────────────────────────────────────────────────────────────
 
 function onKeydown(e: KeyboardEvent) {
-  if (e.key === 'Escape' && isPanelOpen.value) close()
+  if (e.key === 'Escape' && isPanelOpen.value) {
+    if (selectedChildId.value) {
+      selectedChildId.value = null
+    } else {
+      close()
+    }
+  }
 }
 
 onMounted(() => {
@@ -216,10 +333,8 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('keydown', onKeydown)
-  if (pane) {
-    pane.dispose()
-    pane = null
-  }
+  if (pane) { pane.dispose(); pane = null }
+  if (childPane) { childPane.dispose(); childPane = null }
 })
 </script>
 
@@ -237,53 +352,137 @@ onUnmounted(() => {
   <!-- Sliding side panel -->
   <Transition name="panel">
     <aside
-      v-if="isPanelOpen && draft && schema"
+      v-if="isPanelOpen && draft"
       class="editor-panel"
       role="complementary"
       aria-label="Editor de bloque"
     >
-      <!-- Panel header -->
-      <div class="panel-header">
-        <span class="panel-title">{{ draft.type }}</span>
-        <button
-          class="panel-close"
-          type="button"
-          aria-label="Cerrar panel"
-          @click="close"
+      <!-- ── Composite block panel ─────────────────────────────────────────── -->
+      <template v-if="draft.type === 'Composite'">
+        <!-- Composite panel header -->
+        <div class="panel-header">
+          <span class="panel-title">
+            <span class="composite-icon">⊞</span>
+            {{ compositeDef?.name ?? 'Componente' }}
+          </span>
+          <div class="panel-header-actions">
+            <button
+              class="panel-action-btn"
+              title="Desagrupar (restaurar bloques originales)"
+              @click="ungroupCurrent"
+            >
+              Desagrupar
+            </button>
+            <button
+              class="panel-close"
+              type="button"
+              aria-label="Cerrar panel"
+              @click="close"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+
+        <!-- No definition found -->
+        <div v-if="!compositeDef" class="composite-missing-msg">
+          <p>⚠ Definición no encontrada</p>
+          <p class="composite-missing-id">ID: {{ draft.props.definitionId }}</p>
+        </div>
+
+        <!-- Child tree list -->
+        <template v-else>
+          <div class="composite-children-header">
+            <span class="section-label">Bloques hijos</span>
+            <span v-if="selectedChildId" class="back-link" @click="selectedChildId = null">← Volver</span>
+          </div>
+
+          <!-- Child list view -->
+          <ul v-if="!selectedChildId" class="composite-child-list">
+            <li
+              v-for="child in compositeDef.children"
+              :key="child.id"
+              class="composite-child-item"
+              @click="selectedChildId = child.id"
+            >
+              <span class="child-type">{{ child.type }}</span>
+              <span class="child-arrow">›</span>
+            </li>
+          </ul>
+
+          <!-- Child override editor -->
+          <template v-else-if="selectedChild">
+            <div class="child-editor-header">
+              <span class="child-editor-type">{{ selectedChild.type }}</span>
+              <span class="child-editor-hint">Editando overrides de instancia</span>
+            </div>
+
+            <div ref="childPaneContainer" class="pane-container" />
+
+            <!-- Textarea fields for json/css overrides -->
+            <div
+              v-for="field in childTextareaFields"
+              :key="field.key"
+              class="textarea-field"
+            >
+              <label class="textarea-label">{{ field.label }}</label>
+              <textarea
+                v-if="field.type === 'json'"
+                class="field-textarea"
+                :value="jsonFieldValues[field.key] ?? ''"
+                rows="6"
+                @input="onChildJsonInput(field.key, $event)"
+              />
+            </div>
+          </template>
+        </template>
+      </template>
+
+      <!-- ── Regular block panel ───────────────────────────────────────────── -->
+      <template v-else-if="schema">
+        <!-- Panel header -->
+        <div class="panel-header">
+          <span class="panel-title">{{ draft.type }}</span>
+          <button
+            class="panel-close"
+            type="button"
+            aria-label="Cerrar panel"
+            @click="close"
+          >
+            ✕
+          </button>
+        </div>
+
+        <!-- Tweakpane mount point — string/boolean/color fields rendered here -->
+        <div ref="paneContainer" class="pane-container" />
+
+        <!-- Plain textareas for json and css fields -->
+        <div
+          v-for="field in textareaFields"
+          :key="field.key"
+          class="textarea-field"
         >
-          ✕
-        </button>
-      </div>
+          <label class="textarea-label">{{ field.label }}</label>
 
-      <!-- Tweakpane mount point — string/boolean/color fields rendered here -->
-      <div ref="paneContainer" class="pane-container" />
+          <textarea
+            v-if="field.type === 'json'"
+            class="field-textarea"
+            :value="jsonFieldValues[field.key] ?? ''"
+            rows="6"
+            placeholder='[{"label":"Inicio","href":"/"}]'
+            @input="onJsonInput(field.key, $event)"
+          />
 
-      <!-- Plain textareas for json and css fields (Tweakpane doesn't handle these) -->
-      <div
-        v-for="field in textareaFields"
-        :key="field.key"
-        class="textarea-field"
-      >
-        <label class="textarea-label">{{ field.label }}</label>
-
-        <textarea
-          v-if="field.type === 'json'"
-          class="field-textarea"
-          :value="jsonFieldValues[field.key] ?? ''"
-          rows="6"
-          placeholder='[{"label":"Inicio","href":"/"}]'
-          @input="onJsonInput(field.key, $event)"
-        />
-
-        <textarea
-          v-else-if="field.type === 'css'"
-          class="field-textarea field-textarea--css"
-          :value="getCssValue(field.key)"
-          rows="4"
-          placeholder="color: red; font-size: 14px;"
-          @input="onCssInput(field.key, $event)"
-        />
-      </div>
+          <textarea
+            v-else-if="field.type === 'css'"
+            class="field-textarea field-textarea--css"
+            :value="getCssValue(field.key)"
+            rows="4"
+            placeholder="color: red; font-size: 14px;"
+            @input="onCssInput(field.key, $event)"
+          />
+        </div>
+      </template>
     </aside>
   </Transition>
 </template>
@@ -336,6 +535,7 @@ onUnmounted(() => {
   top: 0;
   background: #1e1e1e;
   z-index: 1;
+  gap: 8px;
 }
 
 .panel-title {
@@ -344,6 +544,27 @@ onUnmounted(() => {
   letter-spacing: 0.5px;
   text-transform: uppercase;
   color: #aaa;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composite-icon {
+  color: #a78bfa;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.panel-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
 }
 
 /* 44×44 px touch target for close button */
@@ -366,6 +587,113 @@ onUnmounted(() => {
 .panel-close:hover {
   background: #2e2e2e;
   color: #fff;
+}
+
+.panel-action-btn {
+  padding: 0 10px;
+  height: 44px;
+  border: 1px solid #555;
+  background: transparent;
+  color: #bbb;
+  font-size: 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.panel-action-btn:hover {
+  background: #2e2e2e;
+  color: #fff;
+}
+
+/* ── Composite panel ─────────────────────────────────────────────────────────── */
+.composite-missing-msg {
+  padding: 16px;
+  color: #e87070;
+  font-size: 13px;
+}
+
+.composite-missing-id {
+  font-size: 11px;
+  color: #888;
+  word-break: break-all;
+}
+
+.composite-children-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px 6px;
+  border-bottom: 1px solid #2a2a2a;
+}
+
+.section-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #666;
+}
+
+.back-link {
+  font-size: 12px;
+  color: #7c9fd9;
+  cursor: pointer;
+}
+
+.back-link:hover {
+  text-decoration: underline;
+}
+
+.composite-child-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.composite-child-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  border-bottom: 1px solid #2a2a2a;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.composite-child-item:hover {
+  background: #2a2a2a;
+}
+
+.child-type {
+  font-size: 13px;
+  color: #ddd;
+}
+
+.child-arrow {
+  font-size: 16px;
+  color: #666;
+}
+
+.child-editor-header {
+  padding: 10px 16px;
+  border-bottom: 1px solid #2a2a2a;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.child-editor-type {
+  font-size: 13px;
+  font-weight: 600;
+  color: #ddd;
+}
+
+.child-editor-hint {
+  font-size: 11px;
+  color: #666;
 }
 
 /* ── Tweakpane container ────────────────────────────────────────────────────── */

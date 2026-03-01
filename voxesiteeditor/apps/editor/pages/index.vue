@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref, onMounted, onUnmounted } from 'vue'
 import { VueDraggable } from 'vue-draggable-plus'
 import { BlockSchemas } from '@cms/ui/schemas'
 import { SelectableBlock } from '@cms/ui/wrappers'
@@ -14,6 +15,7 @@ import { useAiEditor } from '../composables/useAiEditor'
 import { usePageGenerator } from '../composables/usePageGenerator'
 import { useCollaboration } from '../composables/useCollaboration'
 import { useBlockSelection } from '../composables/useBlockSelection'
+import { useCompositeBlocks } from '../composables/useCompositeBlocks'
 
 const store = usePageStore()
 const { savePage, publishSite } = usePageEditor()
@@ -36,6 +38,107 @@ const { isConnected, connectedUsers, localUser } = useCollaboration('demosite', 
 
 // Block selection with conflict-warning support
 const { selectBlock: selectBlockWithWarning, conflictWarning } = useBlockSelection({ connectedUsers })
+
+// ── Composite blocks — multi-select + group/ungroup ───────────────────────────
+const {
+  selectedIds: compositeSelectedIds,
+  canGroup,
+  toggleSelect,
+  clearSelection: clearCompositeSelection,
+  groupSelected,
+  ungroup
+} = useCompositeBlocks()
+
+/** Whether the sidebar is in multi-select mode. */
+const isMultiSelectMode = ref(false)
+
+/** Pending name for the group-as-component dialog. */
+const groupName = ref('')
+
+/** Whether the name dialog is visible. */
+const isGroupDialogOpen = ref(false)
+
+/** Context menu state — blockId of the right-clicked composite block + position. */
+const contextMenu = ref<{ blockId: string; x: number; y: number } | null>(null)
+
+function toggleMultiSelectMode() {
+  isMultiSelectMode.value = !isMultiSelectMode.value
+  if (!isMultiSelectMode.value) {
+    clearCompositeSelection()
+  }
+}
+
+function onBlockClick(blockId: string) {
+  if (isMultiSelectMode.value) {
+    toggleSelect(blockId)
+  } else {
+    selectBlockWithWarning(blockId)
+  }
+}
+
+function openGroupDialog() {
+  if (!canGroup.value) return
+  groupName.value = 'Componente sin nombre'
+  isGroupDialogOpen.value = true
+}
+
+function confirmGroup() {
+  const name = groupName.value.trim() || 'Componente sin nombre'
+  groupSelected(name)
+  isGroupDialogOpen.value = false
+  groupName.value = ''
+  isMultiSelectMode.value = false
+}
+
+function cancelGroup() {
+  isGroupDialogOpen.value = false
+  groupName.value = ''
+}
+
+function onBlockContextMenu(blockId: string, event: MouseEvent) {
+  const block = store.currentPage?.blocks.find(b => b.id === blockId)
+  if (block?.type !== 'Composite') return
+  event.preventDefault()
+  contextMenu.value = { blockId, x: event.clientX, y: event.clientY }
+}
+
+function onUngroupFromMenu() {
+  if (!contextMenu.value) return
+  ungroup(contextMenu.value.blockId)
+  contextMenu.value = null
+}
+
+function closeContextMenu() {
+  contextMenu.value = null
+}
+
+// Close context menu on outside click / escape
+function onGlobalKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape') {
+    if (contextMenu.value) {
+      contextMenu.value = null
+      return
+    }
+    if (isGroupDialogOpen.value) {
+      cancelGroup()
+      return
+    }
+    if (isMultiSelectMode.value) {
+      isMultiSelectMode.value = false
+      clearCompositeSelection()
+    }
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('keydown', onGlobalKeydown)
+  window.addEventListener('click', closeContextMenu)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', onGlobalKeydown)
+  window.removeEventListener('click', closeContextMenu)
+})
 
 function addNewPage() {
   store.addPage({
@@ -147,7 +250,7 @@ function addNewPage() {
         <template v-else>
           <div class="block-add-buttons">
             <button
-              v-for="[type, schema] in Object.entries(BlockSchemas)"
+              v-for="[type, schema] in Object.entries(BlockSchemas).filter(([t]) => t !== 'Composite')"
               :key="type"
               :disabled="!store.currentPage"
               @click="store.addBlock(type)"
@@ -159,9 +262,27 @@ function addNewPage() {
             <button :disabled="!store.canRedo" @click="store.redo()">Rehacer</button>
           </div>
 
-          <!-- Draggable block list — drag handle in each SelectableBlock allows reordering.
-               usePageEditor deep-watches store.site and fires PAGE_UPDATE to the iframe
-               automatically after every reorder, so no manual postMessage is needed here. -->
+          <!-- Multi-select toolbar -->
+          <div class="multiselect-toolbar">
+            <button
+              :class="{ active: isMultiSelectMode }"
+              class="multiselect-toggle"
+              title="Seleccionar múltiples bloques"
+              @click="toggleMultiSelectMode"
+            >
+              {{ isMultiSelectMode ? '✕ Cancelar selección' : '⊞ Seleccionar múltiples' }}
+            </button>
+
+            <button
+              v-if="isMultiSelectMode && canGroup"
+              class="group-btn"
+              @click="openGroupDialog"
+            >
+              Agrupar como componente
+            </button>
+          </div>
+
+          <!-- Draggable block list — drag handle in each SelectableBlock allows reordering. -->
           <VueDraggable
             v-model="draggableBlocks"
             v-bind="sortableOptions"
@@ -171,13 +292,30 @@ function addNewPage() {
               v-for="block in draggableBlocks"
               :key="block.id"
               class="block-list__item"
+              :class="{
+                'block-list__item--selected': isMultiSelectMode && compositeSelectedIds.includes(block.id),
+                'block-list__item--composite': block.type === 'Composite'
+              }"
+              @contextmenu="onBlockContextMenu(block.id, $event)"
             >
               <SelectableBlock
                 :blockId="block.id"
                 :enabled="true"
-                @select="selectBlockWithWarning"
+                @select="onBlockClick"
               >
-                <span class="block-list__label">{{ block.type }}</span>
+                <span class="block-list__label">
+                  <span v-if="block.type === 'Composite'" class="composite-badge" title="Componente personalizado">⊞</span>
+                  {{ block.type === 'Composite'
+                    ? (store.site?.customComponents?.find(c => c.id === block.props.definitionId)?.name ?? 'Componente')
+                    : block.type
+                  }}
+                </span>
+                <span
+                  v-if="isMultiSelectMode"
+                  class="select-checkbox"
+                  :class="{ checked: compositeSelectedIds.includes(block.id) }"
+                  aria-hidden="true"
+                />
               </SelectableBlock>
             </div>
           </VueDraggable>
@@ -192,11 +330,6 @@ function addNewPage() {
 
       <!-- iframe preview — fills remaining space -->
       <div class="preview-area">
-        <!--
-          src is bound to the current page slug so switching tabs navigates the iframe.
-          usePageEditor also watches currentPageId and updates src on tab switch.
-          The runtime always renders header + page blocks + footer.
-        -->
         <iframe
           ref="previewFrame"
           :src="`http://localhost:3001/${store.currentPage?.slug ?? 'home'}`"
@@ -214,6 +347,40 @@ function addNewPage() {
 
   <!-- Generate page modal — three tabs: URL / Screenshot / HTML -->
   <GeneratePageModal />
+
+  <!-- ── Group name dialog ─────────────────────────────────────────────────── -->
+  <Transition name="dialog-fade">
+    <div v-if="isGroupDialogOpen" class="dialog-overlay" @click.self="cancelGroup">
+      <div class="dialog-box" role="dialog" aria-modal="true" aria-labelledby="dialog-title">
+        <h3 id="dialog-title" class="dialog-title">Nombrar componente</h3>
+        <input
+          v-model="groupName"
+          class="dialog-input"
+          type="text"
+          placeholder="Nombre del componente"
+          autofocus
+          @keydown.enter="confirmGroup"
+          @keydown.esc="cancelGroup"
+        />
+        <div class="dialog-actions">
+          <button class="dialog-btn dialog-btn--cancel" @click="cancelGroup">Cancelar</button>
+          <button class="dialog-btn dialog-btn--confirm" @click="confirmGroup">Crear componente</button>
+        </div>
+      </div>
+    </div>
+  </Transition>
+
+  <!-- ── Context menu (composite blocks) ──────────────────────────────────── -->
+  <Transition name="ctx-fade">
+    <ul
+      v-if="contextMenu"
+      class="ctx-menu"
+      :style="{ top: contextMenu.y + 'px', left: contextMenu.x + 'px' }"
+      @click.stop
+    >
+      <li class="ctx-menu__item" @click="onUngroupFromMenu">Desagrupar</li>
+    </ul>
+  </Transition>
 </template>
 
 <style>
@@ -391,6 +558,43 @@ function addNewPage() {
   border-bottom: 1px solid #eee;
 }
 
+/* ── Multi-select toolbar ───────────────────────────────────────────────────── */
+.multiselect-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.multiselect-toggle {
+  font-size: 12px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+  background: #fff;
+  cursor: pointer;
+  text-align: left;
+}
+
+.multiselect-toggle.active {
+  background: #e8f0fe;
+  border-color: #4a90d9;
+  color: #2a60b0;
+}
+
+.group-btn {
+  font-size: 12px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  border: 1px solid #5858c8;
+  background: #5858c8;
+  color: #fff;
+  cursor: pointer;
+}
+
+.group-btn:hover {
+  background: #4040b0;
+}
+
 /* ── Block list ─────────────────────────────────────────────────────────────── */
 .block-list {
   display: flex;
@@ -402,8 +606,20 @@ function addNewPage() {
   position: relative;
 }
 
+.block-list__item--selected :deep(.block-label-wrap) {
+  background: #e8f0fe;
+  border-color: #4a90d9;
+}
+
+.block-list__item--composite .block-list__label {
+  background: #f0eaff;
+  border-color: #9b59b6;
+}
+
 .block-list__label {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 4px;
   padding: 8px 8px 8px 52px;
   font-size: 13px;
   font-weight: 500;
@@ -411,6 +627,44 @@ function addNewPage() {
   border-radius: 4px;
   border: 1px solid #e0e0e0;
   user-select: none;
+}
+
+.composite-badge {
+  font-size: 14px;
+  color: #7c3aed;
+  flex-shrink: 0;
+}
+
+/* Checkbox visual indicator in multi-select mode */
+.select-checkbox {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 16px;
+  border: 2px solid #aaa;
+  border-radius: 3px;
+  background: #fff;
+  pointer-events: none;
+}
+
+.select-checkbox.checked {
+  background: #4a90d9;
+  border-color: #4a90d9;
+}
+
+.select-checkbox.checked::after {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 0px;
+  width: 5px;
+  height: 9px;
+  border: 2px solid #fff;
+  border-top: none;
+  border-left: none;
+  transform: rotate(45deg);
 }
 
 /* ── Preview area ───────────────────────────────────────────────────────────── */
@@ -425,5 +679,129 @@ function addNewPage() {
   height: 100%;
   border: none;
   display: block;
+}
+
+/* ── Group name dialog ──────────────────────────────────────────────────────── */
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+
+.dialog-box {
+  background: #1e1e1e;
+  color: #ebebeb;
+  border-radius: 8px;
+  padding: 24px;
+  width: 320px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.dialog-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.dialog-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border-radius: 4px;
+  border: 1px solid #444;
+  background: #111;
+  color: #e8e8e8;
+  font-size: 14px;
+  outline: none;
+}
+
+.dialog-input:focus {
+  border-color: #5858c8;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.dialog-btn {
+  padding: 8px 16px;
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  min-height: 44px;
+}
+
+.dialog-btn--cancel {
+  background: transparent;
+  border-color: #555;
+  color: #aaa;
+}
+
+.dialog-btn--cancel:hover {
+  background: #2a2a2a;
+}
+
+.dialog-btn--confirm {
+  background: #5858c8;
+  color: #fff;
+}
+
+.dialog-btn--confirm:hover {
+  background: #4040b0;
+}
+
+.dialog-fade-enter-active,
+.dialog-fade-leave-active {
+  transition: opacity 0.15s ease;
+}
+
+.dialog-fade-enter-from,
+.dialog-fade-leave-to {
+  opacity: 0;
+}
+
+/* ── Context menu ───────────────────────────────────────────────────────────── */
+.ctx-menu {
+  position: fixed;
+  background: #2a2a2a;
+  border: 1px solid #444;
+  border-radius: 6px;
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+  min-width: 140px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  z-index: 300;
+}
+
+.ctx-menu__item {
+  padding: 8px 16px;
+  font-size: 13px;
+  color: #e8e8e8;
+  cursor: pointer;
+}
+
+.ctx-menu__item:hover {
+  background: #3d3d3d;
+}
+
+.ctx-fade-enter-active,
+.ctx-fade-leave-active {
+  transition: opacity 0.1s ease;
+}
+
+.ctx-fade-enter-from,
+.ctx-fade-leave-to {
+  opacity: 0;
 }
 </style>

@@ -25,10 +25,12 @@ voxesiteeditor/
 | `packages/contracts/page.ts` | ✅ Core types: `Page`, `BaseBlock`, `Site`, `SiteLayout`, `SiteVersion`, `LayoutBlock`, `GridDefinition` |
 | `packages/contracts/blocks/header.ts` | ✅ `HeaderProps`, `HeaderNavLink`, `HeaderBlock` — layout header types |
 | `packages/contracts/blocks/footer.ts` | ✅ `FooterProps`, `FooterColumn`, `FooterLink`, `FooterBlock` — layout footer types |
+| `packages/contracts/blocks/composite.ts` | ✅ `CompositeBlockDefinition`, `CompositeBlockProps` — composite block types |
 | `packages/contracts/messages.ts` | ✅ Typed postMessage protocol: `EditorMessage`, `sendEditorMessage`, `isEditorMessage` |
 | `packages/ui/renderer/renderComponent.ts` | ✅ Maps JSON blocks → Vue components via `h()`; exports `renderBlock`, `renderLayoutBlock`, `renderLayoutHeader`, `renderLayoutFooter` |
 | `packages/ui/schemas/index.ts` | ✅ `BlockSchemas` (Hero, TextBlock) + `LayoutSchemas` (LayoutHeader, LayoutFooter) registries |
-| `packages/ui/schemas/blocks/` | Block schemas for page blocks (hero, text) |
+| `packages/ui/schemas/blocks/` | Block schemas for page blocks (hero, text, composite) |
+| `packages/ui/schemas/blocks/composite.schema.ts` | ✅ `CompositeSchema` — registered in `BlockSchemas` registry |
 | `packages/ui/schemas/layout/` | ✅ Layout block schemas: `header.schema.ts`, `footer.schema.ts` |
 | `packages/ui/components/LayoutHeader.vue` | ✅ Responsive header — logo, nav links, mobile hamburger menu |
 | `packages/ui/components/LayoutFooter.vue` | ✅ Responsive footer — column groups, copyright, auto text-contrast |
@@ -39,6 +41,7 @@ voxesiteeditor/
 | `apps/editor/composables/useLayoutEditor.ts` | ✅ Layout tab mode — `isLayoutMode`, `activateLayoutMode`, `activatePage`, `addOrSelectHeader/Footer` |
 | `apps/editor/composables/useBlockSelection.ts` | ✅ Block selection wrapper |
 | `apps/editor/composables/useDragDrop.ts` | ✅ Drag & drop — `draggableBlocks` computed (get/set), `sortableOptions` for vue-draggable-plus |
+| `apps/editor/composables/useCompositeBlocks.ts` | ✅ Multi-select + group/ungroup — `selectedIds`, `canGroup`, `toggleSelect`, `groupSelected(name)`, `ungroup(blockId)` |
 | `apps/editor/pages/index.vue` | ✅ Thin component — Layout tab + page tabs + `+ Página` button + draggable block list + iframe |
 | `apps/editor/server/api/site.get.ts` | ✅ `GET /api/site` — proxies to build server, triggers migration on first load |
 | `apps/editor/server/api/save.post.ts` | ✅ `POST /api/save` — accepts full `Site`, generates per-page CSS |
@@ -101,6 +104,22 @@ interface Site {
   pages: Page[]
   layout: SiteLayout    // shared layout slots (header/footer/grids)
   publishedAt?: string  // ISO 8601 — set on publish
+  customComponents?: CompositeBlockDefinition[]  // per-site reusable composite blocks
+}
+
+// Composite block types (packages/contracts/blocks/composite.ts)
+interface CompositeBlockDefinition {
+  id: string                          // crypto.randomUUID()
+  name: string                        // user-visible label, e.g. "Product Card"
+  description?: string
+  children: BaseBlock<string, any>[]  // child blocks with their full state
+  layout: 'stack' | 'grid' | 'flex'
+  layoutOptions?: { columns?: number; gap?: string }
+}
+
+interface CompositeBlockProps {
+  definitionId: string
+  overrides?: Record<string, Partial<BaseBlock<string, any>>>  // keyed by child blockId
 }
 
 interface SiteLayout {
@@ -254,6 +273,7 @@ type EditorMessage =
 - [x] **AI Prompt Space** — collapsible bottom panel (`AiPromptPanel.vue`), `useAiEditor()` composable, `LLMAdapter` interface with OpenAI/Ollama/Anthropic implementations, SSE streaming with token-by-token display, `AI_PATCH` postMessage to runtime for live preview, undo-integrated via manual history snapshot before `store.setPage()`; schema context serialized by Nuxt proxy and embedded in LLM system prompt; `POST /api/ai/prompt` on build server; env vars: `LLM_PROVIDER`, `LLM_BASE_URL`, `LLM_MODEL`, `LLM_API_KEY`
 - [x] **Voice Input + Text-to-Voice hook** — WebSocket transcription server (`ws` package) on `/transcription` path sharing port 2999; `TranscriptionAdapter` interface with `WhisperAdapter` (POST /asr multipart, faster-whisper / whisper.cpp compatible) and `MockWhisperAdapter` (dev fallback when `WHISPER_BASE_URL` unset); WS protocol: `VOICE_CHUNK` / `VOICE_END` client→server, `TRANSCRIPT_TOKEN` / `TRANSCRIPT_DONE` / `TRANSCRIPT_ERROR` server→client; `useVoiceInput()` composable — listens for `VOICE_INPUT` postMessages from native layer, forwards audio chunks via WS, accumulates `liveTranscript` ref, populates `aiPrompt` on completion; mic button in `AiPromptPanel` (44×44 px, pulsing red ring while listening, ghost placeholder text shows live transcript); `AI_VOICE_RESPONSE` postMessage sent by `useAiEditor` after SSE completes — forwarded by runtime to native container for TTS (no web audio playback); env vars: `WHISPER_BASE_URL`, `NUXT_PUBLIC_WS_URL`; native TTS integration pending (separate phase — see Android/iOS TODO comments)
 - [x] **Collaborative Editing** — Yjs CRDT sync via y-websocket; PostgreSQL persistence (`sites` + `site_versions` tables, JSONB + collab_state BYTEA); `setupCollaborationServer` on port 2999 (`/collaboration/*` path, noServer WebSocket routing alongside `/transcription`); `useCollaboration()` composable — bidirectional Pinia ↔ Y.Map sync (100 ms debounce, `_suppressSync` flag + `nextTick` loop prevention); presence via y-websocket awareness protocol; `UserPresence` type + `presenceColorFromId()` in `@cms/contracts`; `PresenceBar.vue` — avatar circles (HSL color, initials, pulsing ring on active edit, +N overflow, "you" chip); `PRESENCE_UPDATE` EditorMessage for editor→runtime iframe; `SelectableBlock` peer prop — 3 px HSL left border with CSS transition; runtime `peerMap` tracking presence per block; `useBlockSelection` non-blocking conflict warning toast (3 s auto-dismiss); 6 unit tests (node:test) covering color determinism, two-client sync, concurrent merge, encoding round-trip; env var: `DATABASE_URL`; node-build-server tsconfig upgraded to `moduleResolution: "bundler"` for sub-path exports
+- [x] **Composite Block (Custom Components as Composition)** — Multi-select blocks in sidebar via `useCompositeBlocks()` composable + "⊞ Seleccionar múltiples" toggle; group into a named `CompositeBlockDefinition` stored in `site.customComponents[]`; `createCompositeBlock`, `updateCompositeDefinition`, `deleteCompositeDefinition`, `updateCompositeOverride`, `replaceBlockWithChildren` store actions (all with snapshot/undo); recursive renderer resolution in `renderBlock()` (Composite handled before registry lookup, passes `site` via `RenderOptions`); `BlockEditorPanel` composite mode — tree list of child blocks, click-to-edit overrides with per-child Tweakpane inspector, "Desagrupar" button (44×44 px); missing-definition placeholder (red dashed border); right-click context menu "Desagrupar" on composite items in sidebar; named-component dialog (Escape to cancel, Enter to confirm); `CompositeSchema` registered in `BlockSchemas`; runtime `[slug].vue` passes `site` ref to all `renderBlock` calls; 12 new unit tests in `composite.test.ts` (38 total passing)
 
 ---
 
@@ -356,6 +376,43 @@ All sub-tasks done. `LayoutHeader` + `LayoutFooter` block types, schemas, compon
 - Implemented as the "HTML" tab of the Generate Page modal
 - Flow: paste HTML → server DOMPurify sanitisation + jsdom outline → LLM → `Page` JSON
 - SSE streaming, works with text-only local LLMs
+
+### 12. ✅ Composite Block (Custom Components as Composition) — COMPLETE
+- ✅ `CompositeBlockDefinition` + `CompositeBlockProps` types in `packages/contracts/blocks/composite.ts`; `site.customComponents?: CompositeBlockDefinition[]` added to `Site`
+- ✅ `renderBlock()` handles `type === 'Composite'` before registry lookup — resolves definition from `options.site?.customComponents`, renders children with overrides merged, shows red-dashed placeholder when definition missing; `RenderOptions.site?` added for resolution context
+- ✅ `usePageStore` actions: `createCompositeBlock(blockIds, name)`, `updateCompositeDefinition(def)`, `deleteCompositeDefinition(id)`, `updateCompositeOverride(blockId, childId, override)`, `replaceBlockWithChildren(blockId, children)` — all with undo snapshots
+- ✅ `useCompositeBlocks()` composable — `selectedIds`, `canGroup`, `toggleSelect`, `clearSelection`, `groupSelected(name)`, `ungroup(blockId)`
+- ✅ Editor UI: "⊞ Seleccionar múltiples" toggle in sidebar; blue checkbox/border on selected items; "Agrupar como componente" button appears when `canGroup`; inline name dialog (Escape = cancel, Enter = confirm); right-click context menu → "Desagrupar" on Composite items; Escape exits multi-select mode
+- ✅ `BlockEditorPanel` composite mode: shows definition name as title with ⊞ icon; tree list of child blocks; click child → per-child Tweakpane override editor; "Desagrupar" button (44×44 px touch target); Escape backs out of child editor
+- ✅ `CompositeSchema` registered in `BlockSchemas`; Composite not shown in "Add block" buttons (only creatable via grouping)
+- ✅ Runtime `[slug].vue`: `site` ref typed as `Site | null`; all `renderBlock(block, { site })` calls pass full site for definition lookup; `PAGE_UPDATE` handler keeps `site.pages` in sync
+- ✅ 12 unit tests in `node-build-server/src/__tests__/composite.test.ts` — createCompositeBlock (5 tests), replaceBlockWithChildren (3 tests), updateCompositeOverride (3 tests), missing-definition guard (1 test); **38 total tests passing**
+
+### 13. JSON Form Builder with Conditions + Secure Endpoint Proxy — Pending
+- Pending: `FormField`, `FieldCondition`, `FormProps` types in `packages/contracts/blocks/form.ts`
+- Pending: `FormBlock.vue` component with `useFormConditions` + `useFormValidation` composables
+- Pending: `form.schema.ts` — `fields` as `type: 'json'`, `endpointKey` as `type: 'string'`
+- Pending: `form_endpoints` table migration (key, site_id, url, auth_value encrypted)
+- Pending: `POST /api/:siteId/form-submit` proxy route with AES-256-GCM credential decryption
+- Pending: Rate limiting per IP + per endpointKey via `formRateLimiter`
+- Pending: Form Endpoints settings panel in editor (CRUD for endpoint configs)
+- Pending: New env var: `ENDPOINT_ENCRYPTION_KEY`
+
+### 14. Full Component Library — Pending
+- Pending: Block Manifest pattern (`packages/ui/blocks/manifest.ts`) — single registration point
+- Pending: Tier 1 (8 blocks): `CardGrid`, `ImageGallery`, `CTABanner`, `Testimonials`, `Features`, `PricingTable`, `FAQ`, `ContactInfo`
+- Pending: Tier 2 (8 blocks): `Flyer`, `VideoEmbed`, `Countdown`, `StatsBanner`, `TeamSection`, `LogoCloud`, `Timeline`, `Breadcrumb`
+- Pending: Tier 3 (16 blocks): `ProductCard`, `ProductGrid`, `ProductDetail`, `MapEmbed`, `NewsletterSignup`, `SearchBar`, `Accordion`, `Tabs`, `Carousel`, `Table`, `CodeBlock`, `Divider`, `Spacer`, `Alert`, `ProgressBar`
+
+### 15. ISR for E-commerce and SEO — Pending
+- Pending: `routeRules` ISR config in `apps/runtime/nuxt.config.ts` (products 1hr, blog 24hr, home prerender)
+- Pending: `Product` type in `packages/contracts/product.ts`
+- Pending: `apps/runtime/pages/productos/[slug].vue` with `useAsyncData` + `useSeoMeta` + Schema.org JSON-LD
+- Pending: `apps/runtime/pages/productos/index.vue` — product listing (ISR)
+- Pending: `apps/runtime/pages/categorias/[slug].vue` — category page (ISR)
+- Pending: `products` table migration + `productService.ts` CRUD
+- Pending: ISR cache invalidation via `invalidateCache.ts` called on product update
+- Pending: New env vars: `CACHE_PURGE_SECRET`, `RUNTIME_URL`
 
 ---
 

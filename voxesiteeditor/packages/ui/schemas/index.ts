@@ -1,5 +1,6 @@
 import { HeroSchema } from './blocks/hero.schema'
 import { TextBlockSchema } from './blocks/text.schema'
+import { CompositeSchema } from './blocks/composite.schema'
 import { HeaderSchema } from './layout/header.schema'
 import { FooterSchema } from './layout/footer.schema'
 
@@ -23,6 +24,11 @@ export const BlockSchemas: Record<string, any> = {
       ColorStylesSchema,
       TypographyStylesSchema
     ]
+  },
+
+  Composite: {
+    content: CompositeSchema,
+    styles: []
   }
 }
 
