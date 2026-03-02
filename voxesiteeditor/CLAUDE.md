@@ -285,7 +285,7 @@ type EditorMessage =
 - [x] **Voice Input + Text-to-Voice hook** — WebSocket transcription server (`ws` package) on `/transcription` path sharing port 2999; `TranscriptionAdapter` interface with `WhisperAdapter` (POST /asr multipart, faster-whisper / whisper.cpp compatible) and `MockWhisperAdapter` (dev fallback when `WHISPER_BASE_URL` unset); WS protocol: `VOICE_CHUNK` / `VOICE_END` client→server, `TRANSCRIPT_TOKEN` / `TRANSCRIPT_DONE` / `TRANSCRIPT_ERROR` server→client; `useVoiceInput()` composable — listens for `VOICE_INPUT` postMessages from native layer, forwards audio chunks via WS, accumulates `liveTranscript` ref, populates `aiPrompt` on completion; mic button in `AiPromptPanel` (44×44 px, pulsing red ring while listening, ghost placeholder text shows live transcript); `AI_VOICE_RESPONSE` postMessage sent by `useAiEditor` after SSE completes — forwarded by runtime to native container for TTS (no web audio playback); env vars: `WHISPER_BASE_URL`, `NUXT_PUBLIC_WS_URL`; native TTS integration pending (separate phase — see Android/iOS TODO comments)
 - [x] **Collaborative Editing** — Yjs CRDT sync via y-websocket; PostgreSQL persistence (`sites` + `site_versions` tables, JSONB + collab_state BYTEA); `setupCollaborationServer` on port 2999 (`/collaboration/*` path, noServer WebSocket routing alongside `/transcription`); `useCollaboration()` composable — bidirectional Pinia ↔ Y.Map sync (100 ms debounce, `_suppressSync` flag + `nextTick` loop prevention); presence via y-websocket awareness protocol; `UserPresence` type + `presenceColorFromId()` in `@cms/contracts`; `PresenceBar.vue` — avatar circles (HSL color, initials, pulsing ring on active edit, +N overflow, "you" chip); `PRESENCE_UPDATE` EditorMessage for editor→runtime iframe; `SelectableBlock` peer prop — 3 px HSL left border with CSS transition; runtime `peerMap` tracking presence per block; `useBlockSelection` non-blocking conflict warning toast (3 s auto-dismiss); 6 unit tests (node:test) covering color determinism, two-client sync, concurrent merge, encoding round-trip; env var: `DATABASE_URL`; node-build-server tsconfig upgraded to `moduleResolution: "bundler"` for sub-path exports
 - [x] **Composite Block (Custom Components as Composition)** — Multi-select blocks in sidebar via `useCompositeBlocks()` composable + "⊞ Seleccionar múltiples" toggle; group into a named `CompositeBlockDefinition` stored in `site.customComponents[]`; `createCompositeBlock`, `updateCompositeDefinition`, `deleteCompositeDefinition`, `updateCompositeOverride`, `replaceBlockWithChildren` store actions (all with snapshot/undo); recursive renderer resolution in `renderBlock()` (Composite handled before registry lookup, passes `site` via `RenderOptions`); `BlockEditorPanel` composite mode — tree list of child blocks, click-to-edit overrides with per-child Tweakpane inspector, "Desagrupar" button (44×44 px); missing-definition placeholder (red dashed border); right-click context menu "Desagrupar" on composite items in sidebar; named-component dialog (Escape to cancel, Enter to confirm); `CompositeSchema` registered in `BlockSchemas`; runtime `[slug].vue` passes `site` ref to all `renderBlock` calls; 12 new unit tests in `composite.test.ts` (38 total passing)
-- [x] **Block Manifest + Tier 1 Component Library** — `packages/ui/blocks/manifest.ts` is now the **single registration point** for all page blocks; adding a block requires only one file change; `BlockRegistry` map auto-derived; `BlockSchemas` in `schemas/index.ts` auto-derived from manifest; `renderComponent.ts` registry driven by manifest; 8 Tier 1 blocks implemented: `CardGrid`, `ImageGallery`, `CTABanner`, `Testimonials`, `Features`, `PricingTable`, `FAQ`, `ContactInfo`; all blocks responsive (mobile-first), touch-friendly (44×44 px targets), CSP-compliant (`nonce` prop), with JSON-string array prop acceptance; 18 new unit tests in `blocks.test.ts` (56 total passing)
+- [x] **Block Manifest + Full Component Library (34 page blocks)** — `packages/ui/blocks/manifest.ts` is the **single registration point**; `BlockRegistry` + `BlockSchemas` auto-derived; Tier 1 (8): `CardGrid`, `ImageGallery`, `CTABanner`, `Testimonials`, `Features`, `PricingTable`, `FAQ`, `ContactInfo`; Tier 2 (8): `Flyer`, `VideoEmbed`, `Countdown`, `StatsBanner`, `TeamSection`, `LogoCloud`, `Timeline`, `Breadcrumb`; Tier 3 (15): `ProductCard`, `ProductGrid`, `ProductDetail`, `MapEmbed`, `NewsletterSignup`, `SearchBar`, `Accordion`, `Tabs`, `Carousel`, `Table`, `CodeBlock`, `Divider`, `Spacer`, `Alert`, `ProgressBar`; all blocks responsive (mobile-first), touch-friendly (44×44 px targets), CSP-compliant (`nonce` prop), JSON-string array prop acceptance; 116 total tests passing (18 Tier 1 + 58 Tier 2/3 new + 40 pre-existing)
 
 ---
 
@@ -417,16 +417,16 @@ All sub-tasks done. `LayoutHeader` + `LayoutFooter` block types, schemas, compon
 - ✅ `ENDPOINT_ENCRYPTION_KEY` documented in `node-build-server/.env`
 - Pending: Form Endpoints settings panel UI in editor (CRUD modal — `useFormEndpoints` composable is ready, panel component not yet built)
 
-### 14. ✅ Full Component Library — Tier 1 COMPLETE
+### 14. ✅ Full Component Library — COMPLETE
 
 #### Block Manifest pattern — COMPLETE
 - ✅ `packages/ui/blocks/defineBlock.ts` — `BlockManifestEntry` interface + `defineBlockManifest()` helper
-- ✅ `packages/ui/blocks/manifest.ts` — single registration point; `BlockManifest` array drives all downstream registries; `BlockRegistry` map for O(1) renderer lookup
+- ✅ `packages/ui/blocks/manifest.ts` — single registration point; `BlockManifest` array drives all downstream registries; `BlockRegistry` map for O(1) renderer lookup; **34 blocks total**
 - ✅ `packages/ui/schemas/index.ts` — `BlockSchemas` auto-derived from `BlockManifest` via `Object.fromEntries()`; Composite special-cased outside manifest
 - ✅ `packages/ui/renderer/renderComponent.ts` — `registry` replaced by `BlockRegistry` from manifest; layout components (LayoutHeader, LayoutFooter) kept in separate `layoutRegistry`
 - ✅ `apps/editor/pages/index.vue` — "Add block" buttons iterate `BlockSchemas` (unchanged); automatically picks up new blocks via manifest
 
-#### Tier 1 blocks — COMPLETE
+#### Tier 1 blocks — COMPLETE (8 blocks)
 - ✅ `CardGrid` — responsive card grid, configurable columns, image+title+text+CTA per card, JSON array prop
 - ✅ `ImageGallery` — grid/masonry layouts, lightbox with prev/next keyboard navigation, lazy loading
 - ✅ `CTABanner` — full-width call-to-action, configurable bg/text colors, 44×44 px button
@@ -435,14 +435,39 @@ All sub-tasks done. `LayoutHeader` + `LayoutFooter` block types, schemas, compon
 - ✅ `PricingTable` — plan cards, highlighted plan, feature checklist, CTA per plan
 - ✅ `FAQ` — accordion, single/multiple open mode, smooth collapse, 44×44 px touch targets
 - ✅ `ContactInfo` — email/phone/address links, Google Maps iframe embed, responsive 2-col layout
-- ✅ All 8 blocks: TypeScript types in `packages/contracts/blocks/`, schemas in `packages/ui/schemas/blocks/`, Vue SFCs in `packages/ui/components/`
-- ✅ All blocks registered via manifest only — no manual changes to renderer, schemas, or editor needed
-- ✅ All blocks responsive (mobile-first), touch-friendly, CSP-compliant (`nonce` prop), defensively parse JSON string OR Array at runtime
-- ✅ 18 unit tests in `node-build-server/src/__tests__/blocks.test.ts` — defensive JSON parsing (5), FAQ state machine (5), carousel index wrapping (4), schema structure validation (4); **56 total tests passing**
 
-#### Pending
-- Pending: Tier 2 (8 blocks): `Flyer`, `VideoEmbed`, `Countdown`, `StatsBanner`, `TeamSection`, `LogoCloud`, `Timeline`, `Breadcrumb`
-- Pending: Tier 3 (16 blocks): `ProductCard`, `ProductGrid`, `ProductDetail`, `MapEmbed`, `NewsletterSignup`, `SearchBar`, `Accordion`, `Tabs`, `Carousel`, `Table`, `CodeBlock`, `Divider`, `Spacer`, `Alert`, `ProgressBar`
+#### Tier 2 blocks — COMPLETE (8 blocks)
+- ✅ `Flyer` — full-viewport hero image, `::after` overlay via CSS custom properties `--flyer-bg` / `--flyer-overlay-opacity`, configurable text color
+- ✅ `VideoEmbed` — YouTube (`watch?v=` / `youtu.be/` / `embed/`) + Vimeo URL normalization; aspect ratio padding-bottom trick; `autoplay` forces `muted` per browser policy; sandboxed `<iframe>`
+- ✅ `Countdown` — `setInterval` in `onMounted`, cleared in `onUnmounted`; expired state when target passed; `boxes` and `minimal` CSS styles; configurable labels
+- ✅ `StatsBanner` — stat grid with CSS `--stats-columns`, configurable bg/text colors
+- ✅ `TeamSection` — avatar or letter-initial placeholder, social links grid, responsive `--team-columns` CSS variable
+- ✅ `LogoCloud` — `<component :is>` for optional anchor, grayscale CSS filter, hover reveals color, responsive height
+- ✅ `Timeline` — vertical (connected line via `::before`) and horizontal (overflow-x scroll) layouts
+- ✅ `Breadcrumb` — semantic `<nav>` + `<ol>`, `aria-current="page"` on last item, configurable separator, `<a>` vs `<span>` per position
+
+#### Tier 3 blocks — COMPLETE (15 blocks)
+- ✅ `ProductCard` — image, badge, price/originalPrice comparison, CTA button or link, hover zoom
+- ✅ `ProductGrid` — renders `ProductCard` children, optional filter bar (keyed by any prop), `--grid-columns` CSS variable
+- ✅ `ProductDetail` — image gallery with thumbnail row, `activeImg` ref, specs table, CTA, responsive 2-col layout
+- ✅ `MapEmbed` — Google Maps embed via `https://maps.google.com/maps?q={encodeURIComponent(address)}&z={zoom}&output=embed`; sandboxed iframe
+- ✅ `NewsletterSignup` — email form using form proxy endpoint (`/api/form-submit`), `successMessage` on 2xx, inject `siteId`
+- ✅ `SearchBar` — replaces `{query}` in `searchUrl` template with `encodeURIComponent(query.trim())` then navigates
+- ✅ `Accordion` — `openFirst` seed, `openMultiple` mode; independent of FAQ (same logic pattern, separate component)
+- ✅ `Tabs` — `role="tablist"` + `aria-selected`, `hidden` attribute on inactive panels, touch-scroll tablist
+- ✅ `Carousel` — CSS `translateX` transitions, keyboard ArrowLeft/ArrowRight, `setInterval` autoplay cleared in `onUnmounted`, arrows + dot navigation
+- ✅ `Table` — semantic `<table>`, `<caption>`, `striped` (nth-child) + `bordered` CSS modifiers, horizontal scroll wrapper
+- ✅ `CodeBlock` — `<pre><code>`, optional copy button via `navigator.clipboard`, optional line numbers (no external deps)
+- ✅ `Divider` — four styles: `line` (1px border), `dots` (· · ·), `wave` (inline SVG), `fade` (CSS gradient); three margin sizes
+- ✅ `Spacer` — preset height tokens (`xs`/`sm`/`md`/`lg`/`xl`) or `custom` CSS value
+- ✅ `Alert` — `v-if="!isDismissed"`, icon per type (`info`/`success`/`warning`/`error`), optional dismiss button (44×44 px)
+- ✅ `ProgressBar` — `value/max*100` clamped 0–100, CSS custom property `--pb-color`, ARIA `progressbar` role
+
+#### All 34 page blocks
+- ✅ TypeScript types in `packages/contracts/blocks/`, schemas in `packages/ui/schemas/blocks/`, Vue SFCs in `packages/ui/components/`
+- ✅ All registered via manifest only — adding a block requires only 1 entry in `manifest.ts`
+- ✅ All responsive (mobile-first), touch-friendly (44×44 px targets), CSP-compliant (`nonce` prop), defensively parse JSON string OR Array at runtime
+- ✅ 58 unit tests in `node-build-server/src/__tests__/blocks-tier2-tier3.test.ts` covering: parseArrayProp (7), Countdown expired (4), Carousel wrapping (7), Accordion state (6), Alert dismiss (3), SearchBar URL substitution (5), ProgressBar clamping (7), VideoEmbed URL normalization (5), MapEmbed URL construction (3), Table parsing (3), schema structure validation (8); **116 total tests passing** (58 new + 58 existing)
 
 ### 15. ISR for E-commerce and SEO — Pending
 - Pending: `routeRules` ISR config in `apps/runtime/nuxt.config.ts` (products 1hr, blog 24hr, home prerender)
