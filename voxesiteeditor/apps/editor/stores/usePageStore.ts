@@ -182,7 +182,12 @@ export const usePageStore = defineStore('page', () => {
     if (!site.value) return
     const idx = site.value.pages.findIndex(p => p.id === id)
     if (idx === -1) return
-    site.value.pages[idx] = { ...site.value.pages[idx]!, ...meta }
+    // JSON round-trip strips all Vue reactive proxies from the page object
+    // (including nested ones like the blocks array) before we spread meta on top.
+    // Direct spread of `site.value.pages[idx]` would copy reactive Proxies that
+    // structuredClone (used in the page-update watcher) cannot handle.
+    const plain: Page = JSON.parse(JSON.stringify(site.value.pages[idx]!))
+    site.value.pages[idx] = { ...plain, ...meta }
   }
 
   // ─── Backward-compat page action ────────────────────────────────────────────
