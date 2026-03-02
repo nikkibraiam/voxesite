@@ -169,6 +169,22 @@ export const usePageStore = defineStore('page', () => {
     }
   }
 
+  // ─── Page-level metadata actions ────────────────────────────────────────────
+
+  /**
+   * Update page-level metadata (title, slug, seo) without touching blocks.
+   * Does NOT create a history snapshot — page meta edits are saved immediately.
+   */
+  function updatePageMeta(
+    id: string,
+    meta: Partial<Pick<Page, 'title' | 'slug' | 'seo'>>
+  ) {
+    if (!site.value) return
+    const idx = site.value.pages.findIndex(p => p.id === id)
+    if (idx === -1) return
+    site.value.pages[idx] = { ...site.value.pages[idx]!, ...meta }
+  }
+
   // ─── Backward-compat page action ────────────────────────────────────────────
 
   /**
@@ -554,6 +570,7 @@ export const usePageStore = defineStore('page', () => {
     setCurrentPage,
     addPage,
     removePage,
+    updatePageMeta,
     // backward-compat page action
     setPage,
     // block actions

@@ -148,6 +148,46 @@ function addNewPage() {
     blocks: []
   })
 }
+
+// ── Page settings dialog ─────────────────────────────────────────────────────
+const isPageSettingsOpen = ref(false)
+const pageSettingsDraft = ref({
+  id: '',
+  title: '',
+  slug: '',
+  seoTitle: '',
+  seoDescription: ''
+})
+
+function openPageSettings(e: MouseEvent, page: { id: string; title?: string; slug: string; seo?: { title: string; description?: string } }) {
+  e.stopPropagation()
+  pageSettingsDraft.value = {
+    id: page.id,
+    title: page.title ?? '',
+    slug: page.slug,
+    seoTitle: page.seo?.title ?? '',
+    seoDescription: page.seo?.description ?? ''
+  }
+  isPageSettingsOpen.value = true
+}
+
+function savePageSettings() {
+  const d = pageSettingsDraft.value
+  store.updatePageMeta(d.id, {
+    title: d.title || undefined,
+    slug: d.slug.trim() || d.id,
+    seo: (d.seoTitle || d.seoDescription)
+      ? { title: d.seoTitle, description: d.seoDescription || undefined }
+      : undefined
+  })
+  isPageSettingsOpen.value = false
+}
+
+function deleteCurrentPageFromSettings() {
+  const id = pageSettingsDraft.value.id
+  isPageSettingsOpen.value = false
+  store.removePage(id)
+}
 </script>
 
 <template>
@@ -161,14 +201,20 @@ function addNewPage() {
         Layout
       </button>
 
-      <button
+      <span
         v-for="p in store.site?.pages ?? []"
         :key="p.id"
+        class="page-tab"
         :class="{ active: !isLayoutMode && p.id === store.currentPageId }"
         @click="activatePage(p.id)"
       >
         {{ p.title ?? p.slug }}
-      </button>
+        <button
+          class="page-tab__settings"
+          title="Configurar página"
+          @click="openPageSettings($event, p)"
+        >⚙</button>
+      </span>
 
       <button @click="addNewPage">+ Página</button>
 
@@ -370,6 +416,48 @@ function addNewPage() {
     </div>
   </Transition>
 
+  <!-- ── Page settings dialog ─────────────────────────────────────────────── -->
+  <Transition name="dialog-fade">
+    <div v-if="isPageSettingsOpen" class="dialog-overlay" @click.self="isPageSettingsOpen = false">
+      <div class="dialog-box page-settings-box" role="dialog" aria-modal="true" aria-labelledby="pset-title">
+        <h3 id="pset-title" class="dialog-title">Configurar página</h3>
+
+        <label class="pset-label">
+          Nombre (pestaña)
+          <input v-model="pageSettingsDraft.title" class="dialog-input" type="text" placeholder="Mi página" />
+        </label>
+
+        <label class="pset-label">
+          Slug (URL)
+          <input v-model="pageSettingsDraft.slug" class="dialog-input" type="text" placeholder="mi-pagina" />
+        </label>
+
+        <label class="pset-label">
+          SEO — Título
+          <input v-model="pageSettingsDraft.seoTitle" class="dialog-input" type="text" placeholder="Título para buscadores" />
+        </label>
+
+        <label class="pset-label">
+          SEO — Descripción
+          <textarea v-model="pageSettingsDraft.seoDescription" class="dialog-input pset-textarea" placeholder="Descripción breve…" />
+        </label>
+
+        <div class="dialog-actions pset-actions">
+          <button
+            class="dialog-btn pset-delete-btn"
+            :disabled="(store.site?.pages.length ?? 0) <= 1"
+            :title="(store.site?.pages.length ?? 0) <= 1 ? 'No se puede eliminar la única página' : 'Eliminar página'"
+            @click="deleteCurrentPageFromSettings"
+          >Eliminar página</button>
+          <div class="pset-actions-right">
+            <button class="dialog-btn dialog-btn--cancel" @click="isPageSettingsOpen = false">Cancelar</button>
+            <button class="dialog-btn dialog-btn--confirm" @click="savePageSettings">Guardar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </Transition>
+
   <!-- ── Context menu (composite blocks) ──────────────────────────────────── -->
   <Transition name="ctx-fade">
     <ul
@@ -430,6 +518,48 @@ function addNewPage() {
   background: #4a90d9;
   color: #fff;
   border-color: #4a90d9;
+}
+
+/* Page tab — wraps label + ⚙ gear button */
+.page-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px 4px 12px;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+  background: #fff;
+  cursor: pointer;
+  font-size: 13px;
+  user-select: none;
+}
+
+.page-tab.active {
+  background: #4a90d9;
+  color: #fff;
+  border-color: #4a90d9;
+}
+
+.page-tab__settings {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 3px;
+  font-size: 13px;
+  cursor: pointer;
+  color: inherit;
+  opacity: 0.6;
+  flex-shrink: 0;
+}
+
+.page-tab__settings:hover {
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.12);
 }
 
 /* Generate page button — ⚡ icon, 44×44 px touch target */
@@ -803,5 +933,53 @@ function addNewPage() {
 .ctx-fade-enter-from,
 .ctx-fade-leave-to {
   opacity: 0;
+}
+
+/* ── Page settings dialog extras ────────────────────────────────────────────── */
+.page-settings-box {
+  width: 360px;
+  gap: 12px;
+}
+
+.pset-label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: #aaa;
+}
+
+.pset-textarea {
+  resize: vertical;
+  min-height: 64px;
+  font-family: inherit;
+  font-size: 14px;
+}
+
+.pset-actions {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.pset-actions-right {
+  display: flex;
+  gap: 8px;
+}
+
+.pset-delete-btn {
+  background: transparent;
+  border-color: #c0392b;
+  color: #e74c3c;
+}
+
+.pset-delete-btn:hover:not(:disabled) {
+  background: #c0392b;
+  color: #fff;
+}
+
+.pset-delete-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
 }
 </style>
