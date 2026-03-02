@@ -22,6 +22,13 @@ import { setupCollaborationServer } from './collaboration/yjsServer'
 import { pool } from './db/client'
 import { handleFormSubmit } from './formEndpoints/proxyHandler'
 import { encrypt } from './formEndpoints/encryptionUtils'
+import {
+  listProducts,
+  getProductBySlug,
+  getProductsByCategory,
+  createProduct,
+  updateProduct,
+} from './products/productService'
 
 const app = express()
 
@@ -381,6 +388,83 @@ app.post('/api/:siteId/generate/html', async (req, res) => {
   const textInput = `Generate a CMS page based on this HTML content.\n\nDOM structure:\n${domText}`
 
   await handleGenerate(res, schemaContext, textInput)
+})
+
+// ─── Product CRUD routes ──────────────────────────────────────────────────────
+//
+// GET  /api/:siteId/products                    — list all products (paginated)
+// GET  /api/:siteId/products/category/:catSlug  — products by category
+// GET  /api/:siteId/products/:slug              — single product by slug
+// POST /api/:siteId/products                    — create product
+// PUT  /api/:siteId/products/:id                — update product
+//
+// NOTE: the /category/:catSlug route must be registered BEFORE /:slug
+// to prevent Express from matching "category" as a slug.
+
+app.get('/api/:siteId/products', async (req, res) => {
+  const { siteId } = req.params
+  if (!pool) return res.status(503).json({ error: 'Database not configured' })
+  try {
+    const page = parseInt(String(req.query.page ?? '1'), 10)
+    const limit = Math.min(parseInt(String(req.query.limit ?? '20'), 10), 100)
+    const category = req.query.category ? String(req.query.category) : undefined
+    const result = await listProducts(siteId, { page, limit, category })
+    res.json({ ok: true, ...result })
+  } catch (err: any) {
+    res.status(500).json({ ok: false, error: err.message })
+  }
+})
+
+app.get('/api/:siteId/products/category/:catSlug', async (req, res) => {
+  const { siteId, catSlug } = req.params
+  if (!pool) return res.status(503).json({ error: 'Database not configured' })
+  try {
+    const products = await getProductsByCategory(siteId, catSlug)
+    res.json({ ok: true, products })
+  } catch (err: any) {
+    res.status(500).json({ ok: false, error: err.message })
+  }
+})
+
+app.get('/api/:siteId/products/:slug', async (req, res) => {
+  const { siteId, slug } = req.params
+  if (!pool) return res.status(503).json({ error: 'Database not configured' })
+  try {
+    const product = await getProductBySlug(siteId, slug)
+    if (!product) return res.status(404).json({ ok: false, error: 'Product not found' })
+    res.json({ ok: true, product })
+  } catch (err: any) {
+    res.status(500).json({ ok: false, error: err.message })
+  }
+})
+
+app.post('/api/:siteId/products', async (req, res) => {
+  const { siteId } = req.params
+  if (!pool) return res.status(503).json({ error: 'Database not configured' })
+  const data = req.body
+  if (!data?.slug || !data?.name) {
+    return res.status(400).json({ ok: false, error: 'slug and name are required' })
+  }
+  try {
+    const product = await createProduct(siteId, data)
+    res.status(201).json({ ok: true, product })
+  } catch (err: any) {
+    res.status(500).json({ ok: false, error: err.message })
+  }
+})
+
+app.put('/api/:siteId/products/:id', async (req, res) => {
+  const { siteId, id } = req.params
+  if (!pool) return res.status(503).json({ error: 'Database not configured' })
+  try {
+    const product = await updateProduct(siteId, id, req.body)
+    res.json({ ok: true, product })
+  } catch (err: any) {
+    if (err.message?.includes('not found')) {
+      return res.status(404).json({ ok: false, error: err.message })
+    }
+    res.status(500).json({ ok: false, error: err.message })
+  }
 })
 
 // ─── Form submission + endpoint CRUD routes ───────────────────────────────────

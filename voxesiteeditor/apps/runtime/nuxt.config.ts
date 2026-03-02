@@ -18,6 +18,31 @@ try {
 export default defineNuxtConfig({
   ssr: true,
 
+  // ── ISR / route-level caching rules ─────────────────────────────────────────
+  //
+  // Static pages are prerendered at build time.
+  // E-commerce routes use ISR (first hit SSR, then cached for the given TTL).
+  // Checkout and API routes are always fresh SSR / no-store.
+  //
+  // ISR is configured ONLY here — page components must not add SSR/ISR logic.
+  routeRules: {
+    '/': { prerender: true },
+    '/about': { prerender: true },
+    '/contact': { prerender: true },
+    '/productos/**': {
+      isr: 3600,
+      headers: { 'Cache-Control': 's-maxage=3600, stale-while-revalidate=86400' },
+    },
+    '/categorias/**': { isr: 3600 },
+    '/blog/**': { isr: 86400 },
+    '/checkout/**': { ssr: true },
+    '/api/**': { cors: true, headers: { 'Cache-Control': 'no-store' } },
+  },
+
+  experimental: {
+    payloadExtraction: true,
+  },
+
   // ── CSP nonce injection via render:html hook ─────────────────────────────
   //
   // The CSP middleware (server/middleware/csp.ts) generates a nonce per request
@@ -63,7 +88,8 @@ export default defineNuxtConfig({
       publicDir: `public_builds/${siteId}`, // build aislado por siteId
     },
     prerender: {
-      routes, // prerender dinámico basado en tus JSON
+      crawlLinks: true,                 // auto-discover static routes from prerendered pages
+      routes,                           // prerender dinámico basado en tus JSON
     },
   },
 

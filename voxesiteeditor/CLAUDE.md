@@ -86,6 +86,14 @@ voxesiteeditor/
 | `node-build-server/src/formEndpoints/proxyHandler.ts` | ✅ Secure form proxy — endpoint lookup, credential decrypt, server-side re-validation, audit log |
 | `apps/editor/server/api/form-submit.post.ts` | ✅ `POST /api/form-submit` — Nuxt proxy to build server |
 | `apps/editor/composables/useFormEndpoints.ts` | ✅ CRUD composable for `form_endpoints` — `load`, `create`, `remove` |
+| `packages/contracts/product.ts` | ✅ `Product` interface — id, slug, name, price, currency, images, category, tags, seo, attributes, relatedProductIds |
+| `node-build-server/src/products/productService.ts` | ✅ Product CRUD — `listProducts`, `getProductBySlug`, `getProductsByCategory`, `createProduct`, `updateProduct` (calls cache invalidation on update) |
+| `node-build-server/src/products/invalidateCache.ts` | ✅ `invalidateProductCache(siteId, slug)` — POSTs to `${RUNTIME_URL}/_nitro/cache/clear` with `x-cache-purge-key` header |
+| `apps/runtime/pages/productos/[slug].vue` | ✅ Product detail page — `useAsyncData`, `useSeoMeta`, Schema.org JSON-LD; ISR via `routeRules` |
+| `apps/runtime/pages/productos/index.vue` | ✅ Paginated product listing — pagination controls, category filter via query param; ISR via `routeRules` |
+| `apps/runtime/pages/categorias/[slug].vue` | ✅ Category product listing — `useAsyncData(`category-${slug}`)`, `useSeoMeta`; ISR via `routeRules` |
+| `apps/editor/server/api/products.get.ts` | ✅ `GET /api/products` — proxy to build server product list |
+| `apps/editor/server/api/products/[slug].get.ts` | ✅ `GET /api/products/:slug` — proxy to build server single product |
 
 ---
 
@@ -469,15 +477,19 @@ All sub-tasks done. `LayoutHeader` + `LayoutFooter` block types, schemas, compon
 - ✅ All responsive (mobile-first), touch-friendly (44×44 px targets), CSP-compliant (`nonce` prop), defensively parse JSON string OR Array at runtime
 - ✅ 58 unit tests in `node-build-server/src/__tests__/blocks-tier2-tier3.test.ts` covering: parseArrayProp (7), Countdown expired (4), Carousel wrapping (7), Accordion state (6), Alert dismiss (3), SearchBar URL substitution (5), ProgressBar clamping (7), VideoEmbed URL normalization (5), MapEmbed URL construction (3), Table parsing (3), schema structure validation (8); **116 total tests passing** (58 new + 58 existing)
 
-### 15. ISR for E-commerce and SEO — Pending
-- Pending: `routeRules` ISR config in `apps/runtime/nuxt.config.ts` (products 1hr, blog 24hr, home prerender)
-- Pending: `Product` type in `packages/contracts/product.ts`
-- Pending: `apps/runtime/pages/productos/[slug].vue` with `useAsyncData` + `useSeoMeta` + Schema.org JSON-LD
-- Pending: `apps/runtime/pages/productos/index.vue` — product listing (ISR)
-- Pending: `apps/runtime/pages/categorias/[slug].vue` — category page (ISR)
-- Pending: `products` table migration + `productService.ts` CRUD
-- Pending: ISR cache invalidation via `invalidateCache.ts` called on product update
-- Pending: New env vars: `CACHE_PURGE_SECRET`, `RUNTIME_URL`
+### 15. ✅ ISR for E-commerce and SEO — COMPLETE
+- ✅ `routeRules` ISR config in `apps/runtime/nuxt.config.ts` — `/` + static pages `prerender: true`, `/productos/**` `isr: 3600`, `/categorias/**` `isr: 3600`, `/blog/**` `isr: 86400`, `/checkout/**` `ssr: true`; `crawlLinks: true`; `payloadExtraction: true`
+- ✅ `Product` interface in `packages/contracts/product.ts`; exported from `packages/contracts/index.ts`
+- ✅ `apps/runtime/pages/productos/[slug].vue` — `useAsyncData(`product-${slug}`)`, `useSeoMeta()`, Schema.org Product JSON-LD (`@type: 'Product'`, `offers`, `availability`)
+- ✅ `apps/runtime/pages/productos/index.vue` — paginated listing, category filter, `NuxtLink` pagination
+- ✅ `apps/runtime/pages/categorias/[slug].vue` — `useAsyncData(`category-${slug}`)`, product grid for category
+- ✅ `products` table migration in `node-build-server/src/db/migrate.ts` — JSONB, FK to sites, UNIQUE(site_id, slug), two indexes
+- ✅ `productService.ts` CRUD — `listProducts`, `getProductBySlug`, `getProductsByCategory`, `createProduct`, `updateProduct`; `updateProduct` calls `invalidateProductCache` (non-fatal on error)
+- ✅ `invalidateCache.ts` — `invalidateProductCache(siteId, slug)` POSTs to `${RUNTIME_URL}/_nitro/cache/clear`; silently skips when env vars not set
+- ✅ 5 Express routes in `server.ts`: `GET /api/:siteId/products`, `GET /api/:siteId/products/category/:catSlug`, `GET /api/:siteId/products/:slug`, `POST /api/:siteId/products`, `PUT /api/:siteId/products/:id`; category route registered before slug route to avoid Express ambiguity
+- ✅ Nuxt proxy routes `apps/editor/server/api/products.get.ts` + `apps/editor/server/api/products/[slug].get.ts`
+- ✅ New env vars `CACHE_PURGE_SECRET` + `RUNTIME_URL` documented in `node-build-server/.env`
+- ✅ `siteId` sourced from `useRuntimeConfig().public.siteId` in runtime pages (not hardcoded — multi-tenant ready)
 
 ---
 
@@ -522,8 +534,11 @@ Implications:
 ## Known Limitations (to address)
 - Postgres is now primary storage (added in Feature #9) with filesystem fallback — single-tenant only; `DATABASE_URL` env var required for persistence across restarts
 - Version rollback UI not yet built (API exists — `versionHistory` ref is available in `usePageEditor`)
-- `siteId` is hardcoded as `'demosite'` throughout — needs to become dynamic for multi-tenant SaaS
+- `siteId` is hardcoded as `'demosite'` in editor proxies and `[slug].vue` — runtime pages read from `useRuntimeConfig().public.siteId` (multi-tenant ready); editor hardcode needs to become dynamic for full multi-tenant SaaS
 - Grid system (`SiteLayout.grids[]`) type placeholder exists but UI and renderer integration pending
 - Screenshot/URL page generation requires a vision-capable model (gpt-4o, claude-opus-4-6, llava, moondream); text-only models can only use the HTML flow
 - Puppeteer Chromium is downloaded to `~/.cache/puppeteer/` — requires ~300MB disk space; use `puppeteer-core` + system Chrome if disk is constrained
 - Native Android/iOS TTS integration pending — `AI_VOICE_RESPONSE` postMessage is dispatched by the editor but native layer TTS hookup (`TextToSpeech` / `AVSpeechSynthesizer`) not yet implemented
+- Form Endpoints settings panel UI not yet built — `useFormEndpoints` composable is ready; CRUD modal component pending
+- Product admin UI (create/edit products) not yet built in the editor — build server CRUD routes exist; editor UI component pending
+- ISR cache invalidation requires `RUNTIME_URL` + `CACHE_PURGE_SECRET` env vars to be set; silently skips when unset (dev-friendly)

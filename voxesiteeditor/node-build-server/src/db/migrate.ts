@@ -71,6 +71,31 @@ async function migrate() {
     `)
     console.log('[migrate] Index on "form_endpoints" — OK')
 
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS products (
+        id          TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        site_id     TEXT NOT NULL,
+        slug        TEXT NOT NULL,
+        data        JSONB NOT NULL,
+        created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE (site_id, slug)
+      );
+    `)
+    console.log('[migrate] Table "products" — OK')
+
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_products_site_id
+        ON products (site_id);
+    `)
+    console.log('[migrate] Index "idx_products_site_id" — OK')
+
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_products_slug
+        ON products (site_id, slug);
+    `)
+    console.log('[migrate] Index "idx_products_slug" — OK')
+
     console.log('[migrate] All migrations complete.')
   } catch (err) {
     console.error('[migrate] Migration failed:', err)
