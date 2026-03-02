@@ -302,6 +302,14 @@ function ungroupCurrent() {
   store.replaceBlockWithChildren(draft.value.id, compositeDef.value.children)
 }
 
+// ─── Delete block ────────────────────────────────────────────────────────────
+
+function deleteBlock() {
+  if (!draft.value || draftContext.value !== 'page') return
+  store.removeBlock(draft.value.id)
+  // removeBlock clears selectedBlockId → useBlockEditorPanel watch auto-closes the panel
+}
+
 // ─── Panel close ────────────────────────────────────────────────────────────
 
 function close() {
@@ -443,14 +451,24 @@ onUnmounted(() => {
         <!-- Panel header -->
         <div class="panel-header">
           <span class="panel-title">{{ draft.type }}</span>
-          <button
-            class="panel-close"
-            type="button"
-            aria-label="Cerrar panel"
-            @click="close"
-          >
-            ✕
-          </button>
+          <div class="panel-header-actions">
+            <!-- Delete — only available for page blocks, not layout slots -->
+            <button
+              v-if="draftContext === 'page'"
+              class="panel-action-btn panel-delete-btn"
+              type="button"
+              title="Eliminar bloque (Delete)"
+              @click="deleteBlock"
+            >🗑</button>
+            <button
+              class="panel-close"
+              type="button"
+              aria-label="Cerrar panel"
+              @click="close"
+            >
+              ✕
+            </button>
+          </div>
         </div>
 
         <!-- Tweakpane mount point — string/boolean/color fields rendered here -->
@@ -604,6 +622,18 @@ onUnmounted(() => {
 .panel-action-btn:hover {
   background: #2e2e2e;
   color: #fff;
+}
+
+.panel-delete-btn {
+  border-color: #6e2020;
+  color: #e87070;
+  font-size: 14px;
+}
+
+.panel-delete-btn:hover {
+  background: #6e2020;
+  color: #fff;
+  border-color: #6e2020;
 }
 
 /* ── Composite panel ─────────────────────────────────────────────────────────── */

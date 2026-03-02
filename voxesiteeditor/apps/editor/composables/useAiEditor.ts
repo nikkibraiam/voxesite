@@ -1,10 +1,29 @@
-import { ref, toRaw, useTemplateRef } from 'vue'
+import { ref, shallowRef, watchEffect, toRaw, useTemplateRef } from 'vue'
 import { usePageStore } from '../stores/usePageStore'
 import { sendEditorMessage } from '@cms/contracts'
 import type { Page } from '@cms/contracts'
 
 const RUNTIME_ORIGIN = 'http://localhost:3001'
 const MAX_HISTORY = 50
+
+// ── Singleton state — shared across ALL callers of useAiEditor() ─────────────
+// This is required because index.vue holds the toggle button while
+// AiPromptPanel.vue holds the v-if and the form. Both call this composable,
+// so they MUST share the same reactive refs.
+const isAiPanelOpen = ref(false)
+const aiPrompt = ref('')
+const isLoading = ref(false)
+const aiError = ref<string | null>(null)
+/** Accumulates streamed tokens during a streaming LLM response. */
+const streamedTokens = ref('')
+
+/**
+ * Shared preview frame ref — populated by whichever component has
+ * `<iframe ref="previewFrame">` in its template (index.vue).
+ * AiPromptPanel.vue has no such element so its localFrame is null; the
+ * module-level ref retains the frame set by index.vue.
+ */
+const _previewFrame = shallowRef<HTMLIFrameElement | null>(null)
 
 /**
  * Manages the AI Prompt Space panel.
@@ -14,14 +33,14 @@ const MAX_HISTORY = 50
  */
 export function useAiEditor() {
   const store = usePageStore()
-  const previewFrame = useTemplateRef<HTMLIFrameElement>('previewFrame')
 
-  const isAiPanelOpen = ref(false)
-  const aiPrompt = ref('')
-  const isLoading = ref(false)
-  const aiError = ref<string | null>(null)
-  /** Accumulates streamed tokens during a streaming LLM response. */
-  const streamedTokens = ref('')
+  // Register the preview frame from the calling component's template (if present).
+  // index.vue has <iframe ref="previewFrame">; AiPromptPanel.vue does not.
+  // watchEffect runs inside the component's effect scope, so it is safe to call here.
+  const localFrame = useTemplateRef<HTMLIFrameElement>('previewFrame')
+  watchEffect(() => {
+    if (localFrame.value) _previewFrame.value = localFrame.value
+  })
 
   function toggleAiPanel() {
     isAiPanelOpen.value = !isAiPanelOpen.value
@@ -96,7 +115,7 @@ export function useAiEditor() {
           }
 
           if (data.done) {
-            _applyAiResult(data.text ?? streamedTokens.value)
+            _applyAiResult(store, data.text ?? streamedTokens.value)
           }
         }
       }
@@ -113,50 +132,6 @@ export function useAiEditor() {
     streamedTokens.value = ''
   }
 
-  // ─── Internal helpers ────────────────────────────────────────────────────────
-
-  function _applyAiResult(text: string) {
-    let page: Page
-    try {
-      page = JSON.parse(text)
-    } catch {
-      aiError.value = 'La IA devolvió un formato inválido. Intenta reformular tu solicitud.'
-      return
-    }
-
-    // Push a history snapshot before mutating so the user can Ctrl+Z the AI change.
-    // store.history is the public Pinia state array (already unwrapped).
-    if (store.currentPage) {
-      store.history.push(structuredClone(toRaw(store.currentPage)))
-      if (store.history.length > MAX_HISTORY) store.history.shift()
-      store.future.splice(0)
-    }
-
-    store.setPage(page)
-
-    if (previewFrame.value?.contentWindow) {
-      // Send AI_PATCH to the runtime iframe for immediate live preview
-      sendEditorMessage(
-        previewFrame.value.contentWindow,
-        { type: 'AI_PATCH', payload: page },
-        RUNTIME_ORIGIN
-      )
-
-      // Send AI_VOICE_RESPONSE so the runtime can forward it to the native layer for TTS.
-      // The web layer does NOT play audio — native Android/iOS handles speech synthesis.
-      // TODO: Native Android/iOS layer should listen for this message and invoke system TTS
-      //       (Android → TextToSpeech API, iOS → AVSpeechSynthesizer)
-      sendEditorMessage(
-        previewFrame.value.contentWindow,
-        { type: 'AI_VOICE_RESPONSE', payload: { text } },
-        RUNTIME_ORIGIN
-      )
-    }
-
-    aiPrompt.value = ''
-    streamedTokens.value = ''
-  }
-
   return {
     isAiPanelOpen,
     aiPrompt,
@@ -167,4 +142,48 @@ export function useAiEditor() {
     submitPrompt,
     clearPrompt
   }
+}
+
+// ─── Internal helper (module-level so it uses the shared _previewFrame) ───────
+
+function _applyAiResult(store: ReturnType<typeof usePageStore>, text: string) {
+  let page: Page
+  try {
+    page = JSON.parse(text)
+  } catch {
+    aiError.value = 'La IA devolvió un formato inválido. Intenta reformular tu solicitud.'
+    return
+  }
+
+  // Push a history snapshot before mutating so the user can Ctrl+Z the AI change.
+  // store.history is the public Pinia state array (already unwrapped).
+  if (store.currentPage) {
+    store.history.push(structuredClone(toRaw(store.currentPage)))
+    if (store.history.length > MAX_HISTORY) store.history.shift()
+    store.future.splice(0)
+  }
+
+  store.setPage(page)
+
+  if (_previewFrame.value?.contentWindow) {
+    // Send AI_PATCH to the runtime iframe for immediate live preview
+    sendEditorMessage(
+      _previewFrame.value.contentWindow,
+      { type: 'AI_PATCH', payload: page },
+      RUNTIME_ORIGIN
+    )
+
+    // Send AI_VOICE_RESPONSE so the runtime can forward it to the native layer for TTS.
+    // The web layer does NOT play audio — native Android/iOS handles speech synthesis.
+    // TODO: Native Android/iOS layer should listen for this message and invoke system TTS
+    //       (Android → TextToSpeech API, iOS → AVSpeechSynthesizer)
+    sendEditorMessage(
+      _previewFrame.value.contentWindow,
+      { type: 'AI_VOICE_RESPONSE', payload: { text } },
+      RUNTIME_ORIGIN
+    )
+  }
+
+  aiPrompt.value = ''
+  streamedTokens.value = ''
 }

@@ -542,3 +542,31 @@ Implications:
 - Form Endpoints settings panel UI not yet built — `useFormEndpoints` composable is ready; CRUD modal component pending
 - Product admin UI (create/edit products) not yet built in the editor — build server CRUD routes exist; editor UI component pending
 - ISR cache invalidation requires `RUNTIME_URL` + `CACHE_PURGE_SECRET` env vars to be set; silently skips when unset (dev-friendly)
+
+---
+
+## Bug Fix Log
+
+### BUG-01 — Drag & Drop reordering broken
+- **Root cause:** `SelectableBlock.vue` drag handle had `@pointerdown.stop` which stopped `pointerdown` from bubbling to SortableJS's container-level event delegate, so drag-start was never detected.
+- **Fix:** Removed `@pointerdown.stop` from `.drag-handle` in `packages/ui/wrappers/SelectableBlock.vue`. SortableJS now receives the event. A drag never fires a `click` event, so the click-to-select handler on the parent is not affected.
+
+### BUG-02 — No alignment grid on the editor canvas
+- **Root cause:** No grid overlay existed.
+- **Fix:** Added a toggleable 12-column CSS guide overlay (`<div class="grid-overlay">`) inside `.preview-area` in `apps/editor/pages/index.vue`. Toggled by a `# Grid` button in the tab bar. The overlay uses `pointer-events: none` and `position: absolute` so it sits over the iframe without intercepting interaction. `.preview-area` gained `position: relative` to anchor it.
+
+### BUG-03 — Cannot delete blocks
+- **Root cause:** No UI or keyboard binding existed to call `store.removeBlock()`.
+- **Fix (keyboard):** Added a `Delete` key handler in `onGlobalKeydown` in `apps/editor/pages/index.vue` — fires only when a page block is selected and `document.activeElement` is not an `<input>` or `<textarea>`.
+- **Fix (UI):** Added a 🗑 delete button to the regular-block panel header in `apps/editor/components/BlockEditorPanel.vue` (hidden for layout blocks). Calls `store.removeBlock(draft.id)`; the store clears `selectedBlockId`, which triggers `useBlockEditorPanel`'s watch to auto-close the panel.
+
+### BUG-04 — AI Panel (✨) button had no effect
+- **Root cause:** `useAiEditor()` created a fresh `ref(false)` for `isAiPanelOpen` on every call. `index.vue` toggled its own instance; `AiPromptPanel.vue` read a completely separate instance — so the panel never opened. Additionally, `previewFrame` (resolved via `useTemplateRef`) was `null` in `AiPromptPanel.vue`'s instance (no `<iframe ref="previewFrame">` in that template), meaning `AI_PATCH` messages were never sent.
+- **Fix:** Lifted all reactive state (`isAiPanelOpen`, `aiPrompt`, `isLoading`, `aiError`, `streamedTokens`) and a shared `_previewFrame` shallowRef to **module level** in `apps/editor/composables/useAiEditor.ts`. A `watchEffect` inside the composable registers the iframe when the calling component has it. Moved `_applyAiResult` to module scope so it always uses the shared frame ref.
+
+### BUG-05 — Generate Page (⚡) button had no effect
+- **Root cause:** Same singleton anti-pattern as BUG-04. `usePageGenerator()` created a fresh `isModalOpen = ref(false)` on every call. `index.vue` called `openModal()` on its instance; `GeneratePageModal.vue` read a different `isModalOpen` — modal never opened.
+- **Fix:** Lifted all reactive state (`isModalOpen`, `activeTab`, `isGenerating`, `generateError`, `streamedTokens`, `urlInput`, `htmlInput`, `screenshotFile`) to **module level** in `apps/editor/composables/usePageGenerator.ts`. All callers now share the same refs.
+
+### Architectural note — composable singleton pattern
+When a composable's state must be shared across multiple component instances (e.g. a panel open/close toggle that is driven from one component but rendered in another), declare the shared `ref()`s at **module level** (outside the exported function). Component-specific things like `useTemplateRef` stay inside the function. This is the standard Vue 3 singleton-composable pattern and is already used implicitly by Pinia stores.

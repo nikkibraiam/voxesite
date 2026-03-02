@@ -32,6 +32,9 @@ const { draggableBlocks, sortableOptions } = useDragDrop()
 const { isAiPanelOpen, toggleAiPanel } = useAiEditor()
 const { openModal: openGenerateModal } = usePageGenerator()
 
+// ── Grid overlay toggle ───────────────────────────────────────────────────────
+const showGridOverlay = ref(false)
+
 // ── Collaboration — single call, shares the iframe ref with usePageEditor ────
 const previewFrame = useTemplateRef<HTMLIFrameElement>('previewFrame')
 const { isConnected, connectedUsers, localUser } = useCollaboration('demosite', previewFrame)
@@ -126,6 +129,15 @@ function onGlobalKeydown(e: KeyboardEvent) {
     if (isMultiSelectMode.value) {
       isMultiSelectMode.value = false
       clearCompositeSelection()
+    }
+  }
+
+  // Delete key — remove the currently selected block when not editing text
+  if (e.key === 'Delete' && store.selectedBlockId && !isMultiSelectMode.value) {
+    const tag = (e.target as HTMLElement).tagName.toLowerCase()
+    if (tag !== 'input' && tag !== 'textarea') {
+      e.preventDefault()
+      store.removeBlock(store.selectedBlockId)
     }
   }
 }
@@ -240,6 +252,14 @@ function deleteCurrentPageFromSettings() {
         title="Panel de IA (✨)"
         @click="toggleAiPanel"
       >✨ IA</button>
+
+      <!-- Grid overlay toggle -->
+      <button
+        class="grid-toggle-btn"
+        :class="{ active: showGridOverlay }"
+        title="Mostrar/ocultar guías de columnas"
+        @click="showGridOverlay = !showGridOverlay"
+      ># Grid</button>
     </div>
 
     <!-- Conflict warning toast — non-blocking informational message -->
@@ -381,6 +401,8 @@ function deleteCurrentPageFromSettings() {
           :src="`http://localhost:3001/${store.currentPage?.slug ?? 'home'}?editor=1`"
           class="preview-iframe"
         />
+        <!-- 12-column guide overlay — pointer-events:none so iframe still receives events -->
+        <div v-if="showGridOverlay" class="grid-overlay" aria-hidden="true" />
       </div>
     </div>
   </div>
@@ -802,6 +824,7 @@ function deleteCurrentPageFromSettings() {
   flex: 1;
   min-width: 0;
   overflow: hidden;
+  position: relative; /* needed for the absolute grid overlay */
 }
 
 .preview-iframe {
@@ -809,6 +832,33 @@ function deleteCurrentPageFromSettings() {
   height: 100%;
   border: none;
   display: block;
+}
+
+/* 12-column guide overlay — non-interactive, purely visual */
+.grid-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 10;
+  background-image: linear-gradient(to right, rgba(74, 144, 217, 0.18) 1px, transparent 1px);
+  background-size: calc(100% / 12) 100%;
+}
+
+/* Grid toggle button */
+.grid-toggle-btn {
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+  background: #fff;
+  cursor: pointer;
+  font-size: 12px;
+  color: #666;
+}
+
+.grid-toggle-btn.active {
+  background: #e8f0fe;
+  border-color: #4a90d9;
+  color: #2a60b0;
 }
 
 /* ── Group name dialog ──────────────────────────────────────────────────────── */

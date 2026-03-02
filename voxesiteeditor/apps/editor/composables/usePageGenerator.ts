@@ -4,6 +4,21 @@ import type { Page } from '@cms/contracts'
 
 export type GenerateTab = 'url' | 'screenshot' | 'html'
 
+// ── Singleton state — shared across ALL callers of usePageGenerator() ─────────
+// index.vue holds the ⚡ open button; GeneratePageModal.vue holds the v-if and
+// form inputs. Both call this composable, so they MUST share the same refs.
+const isModalOpen = ref(false)
+const activeTab = ref<GenerateTab>('url')
+
+const isGenerating = ref(false)
+const generateError = ref<string | null>(null)
+const streamedTokens = ref('')
+
+// ── Per-tab inputs ─────────────────────────────────────────────────────────
+const urlInput = ref('')
+const htmlInput = ref('')
+const screenshotFile = ref<File | null>(null)
+
 /**
  * Manages the Generate Page modal and the three generation flows.
  *
@@ -13,18 +28,6 @@ export type GenerateTab = 'url' | 'screenshot' | 'html'
  */
 export function usePageGenerator() {
   const store = usePageStore()
-
-  const isModalOpen = ref(false)
-  const activeTab = ref<GenerateTab>('url')
-
-  const isGenerating = ref(false)
-  const generateError = ref<string | null>(null)
-  const streamedTokens = ref('')
-
-  // ── Per-tab inputs ─────────────────────────────────────────────────────────
-  const urlInput = ref('')
-  const htmlInput = ref('')
-  const screenshotFile = ref<File | null>(null)
 
   // ── Modal controls ─────────────────────────────────────────────────────────
   function openModal(tab?: GenerateTab) {
@@ -125,7 +128,7 @@ export function usePageGenerator() {
           }
 
           if (data.done && data.page) {
-            _applyGeneratedPage(data.page)
+            _applyGeneratedPage(store, data.page)
           }
         }
       }
@@ -136,12 +139,12 @@ export function usePageGenerator() {
     }
   }
 
-  function _applyGeneratedPage(page: Page) {
+  function _applyGeneratedPage(store: ReturnType<typeof usePageStore>, page: Page) {
     // Ensure the page has a unique ID to avoid collisions with existing pages
     const newPage: Page = {
       ...page,
       id: crypto.randomUUID(),
-      slug: _uniqueSlug(page.slug ?? 'generated-page')
+      slug: _uniqueSlug(store, page.slug ?? 'generated-page')
     }
 
     store.addPage(newPage)
@@ -149,7 +152,7 @@ export function usePageGenerator() {
     streamedTokens.value = ''
   }
 
-  function _uniqueSlug(base: string): string {
+  function _uniqueSlug(store: ReturnType<typeof usePageStore>, base: string): string {
     const existing = new Set((store.site?.pages ?? []).map(p => p.slug))
     if (!existing.has(base)) return base
 

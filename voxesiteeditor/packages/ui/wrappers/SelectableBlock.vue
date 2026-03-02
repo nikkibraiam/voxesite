@@ -31,7 +31,7 @@ function onClick() {
       user grabs the handle. touch-action:none (set in CSS) is required so the
       WebView does not intercept the touch event for page scrolling.
     -->
-    <div class="drag-handle" @pointerdown.stop aria-hidden="true">
+    <div class="drag-handle" aria-hidden="true">
       <svg
         width="16"
         height="16"
