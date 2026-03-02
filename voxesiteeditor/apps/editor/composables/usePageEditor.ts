@@ -73,7 +73,7 @@ export function usePageEditor() {
     () => {
       const slug = store.currentPage?.slug
       if (!slug || !previewFrame.value) return
-      previewFrame.value.src = `${RUNTIME_ORIGIN}/${slug}`
+      previewFrame.value.src = `${RUNTIME_ORIGIN}/${slug}?editor=1`
     }
   )
 

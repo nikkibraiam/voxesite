@@ -33,12 +33,6 @@ function generateNonce(): string {
  * voice transcription.
  */
 export default defineEventHandler((event) => {
-  const nonce = generateNonce()
-
-  // Attach nonce to request context so nuxt.config.ts render hook can read it
-  // and useCspNonce() composable can expose it to page components.
-  event.context.cspNonce = nonce
-
   // ── Detect editor context ────────────────────────────────────────────────
   const url = getRequestURL(event)
   const referer = getRequestHeader(event, 'referer') ?? ''
@@ -46,10 +40,25 @@ export default defineEventHandler((event) => {
     url.searchParams.get('editor') === '1' ||
     referer.includes(':3000') // editor dev server
 
-  const frameAncestors = isEditorMode ? "'self'" : "'none'"
-  const xFrameOptions = isEditorMode ? 'SAMEORIGIN' : 'DENY'
+  // ── Common security headers (always set) ────────────────────────────────
+  setResponseHeader(event, 'X-Content-Type-Options', 'nosniff')
+  setResponseHeader(event, 'Referrer-Policy', 'strict-origin-when-cross-origin')
+  setResponseHeader(event, 'Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
 
-  // ── Build CSP header ─────────────────────────────────────────────────────
+  if (isEditorMode) {
+    // Editor preview iframe: skip strict CSP so inline scripts/styles from
+    // block components are not blocked. Allow framing by the editor origin.
+    setResponseHeader(event, 'X-Frame-Options', 'SAMEORIGIN')
+    return
+  }
+
+  // ── Published site: strict nonce-based CSP ───────────────────────────────
+  const nonce = generateNonce()
+
+  // Attach nonce to request context so nuxt.config.ts render hook can read it
+  // and useCspNonce() composable can expose it to page components.
+  event.context.cspNonce = nonce
+
   const cspDirectives = [
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}'`,
@@ -58,16 +67,12 @@ export default defineEventHandler((event) => {
     "font-src 'self' https:",
     // ws:/wss: needed for collaborative editing (Yjs) and voice transcription WebSockets
     "connect-src 'self' ws: wss:",
-    `frame-ancestors ${frameAncestors}`,
+    "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'",
     'upgrade-insecure-requests',
   ]
 
-  // ── Set response headers ─────────────────────────────────────────────────
   setResponseHeader(event, 'Content-Security-Policy', cspDirectives.join('; '))
-  setResponseHeader(event, 'X-Content-Type-Options', 'nosniff')
-  setResponseHeader(event, 'X-Frame-Options', xFrameOptions)
-  setResponseHeader(event, 'Referrer-Policy', 'strict-origin-when-cross-origin')
-  setResponseHeader(event, 'Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
+  setResponseHeader(event, 'X-Frame-Options', 'DENY')
 })

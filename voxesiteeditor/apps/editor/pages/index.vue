@@ -332,7 +332,7 @@ function addNewPage() {
       <div class="preview-area">
         <iframe
           ref="previewFrame"
-          :src="`http://localhost:3001/${store.currentPage?.slug ?? 'home'}`"
+          :src="`http://localhost:3001/${store.currentPage?.slug ?? 'home'}?editor=1`"
           class="preview-iframe"
         />
       </div>
