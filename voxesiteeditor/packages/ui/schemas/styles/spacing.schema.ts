@@ -1,55 +1,53 @@
 export const SpacingStylesSchema = {
-  padding: {
-    type: 'object',
-    label: 'Padding',
-    fields: {
-      top: {
-        type: 'number',
-        label: 'Top',
-        default: 0,
-      },
-      right: {
-        type: 'number',
-        label: 'Right',
-        default: 0,
-      },
-      bottom: {
-        type: 'number',
-        label: 'Bottom',
-        default: 0,
-      },
-      left: {
-        type: 'number',
-        label: 'Left',
-        default: 0,
-      },
+  group: 'Espaciado',
+  fields: [
+    {
+      label: 'Padding Superior',
+      type: 'string',
+      selector: '',
+      cssProperty: 'padding-top'
     },
-  },
-
-  margin: {
-    type: 'object',
-    label: 'Margin',
-    fields: {
-      top: {
-        type: 'number',
-        label: 'Top',
-        default: 0,
-      },
-      right: {
-        type: 'number',
-        label: 'Right',
-        default: 0,
-      },
-      bottom: {
-        type: 'number',
-        label: 'Bottom',
-        default: 0,
-      },
-      left: {
-        type: 'number',
-        label: 'Left',
-        default: 0,
-      },
+    {
+      label: 'Padding Derecha',
+      type: 'string',
+      selector: '',
+      cssProperty: 'padding-right'
     },
-  },
+    {
+      label: 'Padding Inferior',
+      type: 'string',
+      selector: '',
+      cssProperty: 'padding-bottom'
+    },
+    {
+      label: 'Padding Izquierda',
+      type: 'string',
+      selector: '',
+      cssProperty: 'padding-left'
+    },
+    {
+      label: 'Margin Superior',
+      type: 'string',
+      selector: '',
+      cssProperty: 'margin-top'
+    },
+    {
+      label: 'Margin Derecha',
+      type: 'string',
+      selector: '',
+      cssProperty: 'margin-right'
+    },
+    {
+      label: 'Margin Inferior',
+      type: 'string',
+      selector: '',
+      cssProperty: 'margin-bottom'
+    },
+    {
+      label: 'Margin Izquierda',
+      type: 'string',
+      selector: '',
+      cssProperty: 'margin-left'
+    }
+  ]
 }

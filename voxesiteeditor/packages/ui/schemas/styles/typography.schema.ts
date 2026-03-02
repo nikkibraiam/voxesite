@@ -2,20 +2,28 @@ export const TypographyStylesSchema = {
   group: 'Typography',
   fields: [
     {
-      key: 'fontSize',
       label: 'Tamaño de fuente',
-      type: 'select',
-      options: ['14px', '16px', '20px', '32px'],
-      selector: '.text',
+      type: 'string',
+      selector: '.text, .hero__title, .hero__subtitle, .text-block',
       cssProperty: 'font-size'
     },
     {
-      key: 'fontWeight',
       label: 'Peso',
-      type: 'select',
-      options: ['400', '600', '700'],
-      selector: '.text',
+      type: 'string',
+      selector: '.text, .hero__title, .hero__subtitle, .text-block',
       cssProperty: 'font-weight'
+    },
+    {
+      label: 'Altura de línea',
+      type: 'string',
+      selector: '.text, .hero__title, .hero__subtitle, .text-block',
+      cssProperty: 'line-height'
+    },
+    {
+      label: 'Espaciado de letras',
+      type: 'string',
+      selector: '.text, .hero__title, .hero__subtitle, .text-block',
+      cssProperty: 'letter-spacing'
     }
   ]
 }
