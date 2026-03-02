@@ -49,6 +49,7 @@ export default defineEventHandler((event) => {
     // Editor preview iframe: skip strict CSP so inline scripts/styles from
     // block components are not blocked. Allow framing by the editor origin.
     setResponseHeader(event, 'X-Frame-Options', 'SAMEORIGIN')
+    setResponseHeader(event, 'Content-Security-Policy', "frame-ancestors 'self' http://localhost:3000")
     return
   }
 
