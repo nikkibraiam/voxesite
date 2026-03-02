@@ -57,7 +57,7 @@ export function usePageEditor() {
       if (!newLayout || !previewFrame.value?.contentWindow) return
       sendEditorMessage(
         previewFrame.value.contentWindow,
-        { type: 'LAYOUT_UPDATE', payload: structuredClone(toRaw(newLayout)) },
+        { type: 'LAYOUT_UPDATE', payload: JSON.parse(JSON.stringify(newLayout)) },
         RUNTIME_ORIGIN
       )
     },

@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, computed, toRaw } from 'vue'
+import { ref, computed } from 'vue'
 import type { Page, Site, BaseBlock, SiteLayout, LayoutBlock, CompositeBlockDefinition } from '@cms/contracts'
 import { BlockSchemas, LayoutSchemas } from '@cms/ui/schemas'
 
@@ -85,7 +85,7 @@ export const usePageStore = defineStore('page', () => {
   /** Snapshot the current page before a mutation (for undo). */
   function _snapshot() {
     if (!currentPage.value) return
-    history.value.push(structuredClone(toRaw(currentPage.value)))
+    history.value.push(JSON.parse(JSON.stringify(currentPage.value)))
     if (history.value.length > MAX_HISTORY) history.value.shift()
     future.value = []
   }
@@ -93,7 +93,7 @@ export const usePageStore = defineStore('page', () => {
   /** Snapshot the current layout before a mutation (for layout undo). */
   function _snapshotLayout() {
     if (!site.value) return
-    layoutHistory.value.push(structuredClone(toRaw(site.value.layout)))
+    layoutHistory.value.push(JSON.parse(JSON.stringify(site.value.layout)))
     if (layoutHistory.value.length > MAX_HISTORY) layoutHistory.value.shift()
     layoutFuture.value = []
   }
@@ -222,7 +222,7 @@ export const usePageStore = defineStore('page', () => {
     if (!currentPage.value || !site.value) return
     _snapshot()
     const schema = BlockSchemas[type]
-    const updated: Page = structuredClone(toRaw(currentPage.value))
+    const updated: Page = JSON.parse(JSON.stringify(currentPage.value))
     updated.blocks.push({
       id: crypto.randomUUID(),
       type,
@@ -246,7 +246,7 @@ export const usePageStore = defineStore('page', () => {
     if (!currentPage.value || !site.value) return
     const { snapshot = true } = options
     if (snapshot) _snapshot()
-    const updatedPage: Page = structuredClone(toRaw(currentPage.value))
+    const updatedPage: Page = JSON.parse(JSON.stringify(currentPage.value))
     const idx = updatedPage.blocks.findIndex(b => b.id === updated.id)
     if (idx !== -1) updatedPage.blocks[idx] = updated
     _replacePage(updatedPage)
@@ -261,7 +261,7 @@ export const usePageStore = defineStore('page', () => {
     if (!currentPage.value || !site.value) return
     if (fromIndex === toIndex) return
     _snapshot()
-    const updatedPage: Page = structuredClone(toRaw(currentPage.value))
+    const updatedPage: Page = JSON.parse(JSON.stringify(currentPage.value))
     const [moved] = updatedPage.blocks.splice(fromIndex, 1)
     updatedPage.blocks.splice(toIndex, 0, moved!)
     selectedBlockId.value = null
@@ -275,7 +275,7 @@ export const usePageStore = defineStore('page', () => {
   function removeBlock(id: string) {
     if (!currentPage.value || !site.value) return
     _snapshot()
-    const updatedPage: Page = structuredClone(toRaw(currentPage.value))
+    const updatedPage: Page = JSON.parse(JSON.stringify(currentPage.value))
     updatedPage.blocks = updatedPage.blocks.filter(b => b.id !== id)
     if (selectedBlockId.value === id) selectedBlockId.value = null
     _replacePage(updatedPage)
@@ -312,7 +312,7 @@ export const usePageStore = defineStore('page', () => {
     if (!site.value) return
     const { snapshot = true } = options
     if (snapshot) _snapshotLayout()
-    site.value.layout = structuredClone(layout)
+    site.value.layout = JSON.parse(JSON.stringify(layout))
   }
 
   /**
@@ -326,7 +326,7 @@ export const usePageStore = defineStore('page', () => {
     if (!site.value) return
     const { snapshot = true } = options
     if (snapshot) _snapshotLayout()
-    site.value.layout = { ...site.value.layout, header: structuredClone(toRaw(header)) }
+    site.value.layout = { ...site.value.layout, header: JSON.parse(JSON.stringify(header)) }
   }
 
   /**
@@ -340,7 +340,7 @@ export const usePageStore = defineStore('page', () => {
     if (!site.value) return
     const { snapshot = true } = options
     if (snapshot) _snapshotLayout()
-    site.value.layout = { ...site.value.layout, footer: structuredClone(toRaw(footer)) }
+    site.value.layout = { ...site.value.layout, footer: JSON.parse(JSON.stringify(footer)) }
   }
 
   /**
@@ -358,7 +358,7 @@ export const usePageStore = defineStore('page', () => {
     const block: LayoutBlock = {
       id: crypto.randomUUID(),
       type: 'LayoutHeader',
-      props: structuredClone(schema.content.defaultProps)
+      props: JSON.parse(JSON.stringify(schema.content.defaultProps))
     }
     updateHeader(block, { snapshot: true })
     selectLayoutBlock('header')
@@ -379,7 +379,7 @@ export const usePageStore = defineStore('page', () => {
     const block: LayoutBlock = {
       id: crypto.randomUUID(),
       type: 'LayoutFooter',
-      props: structuredClone(schema.content.defaultProps)
+      props: JSON.parse(JSON.stringify(schema.content.defaultProps))
     }
     updateFooter(block, { snapshot: true })
     selectLayoutBlock('footer')
@@ -412,14 +412,14 @@ export const usePageStore = defineStore('page', () => {
   /** Restore the previous page state from the undo stack. */
   function undo() {
     if (!canUndo.value || !currentPage.value) return
-    future.value.push(structuredClone(toRaw(currentPage.value)))
+    future.value.push(JSON.parse(JSON.stringify(currentPage.value)))
     _replacePage(history.value.pop()!)
   }
 
   /** Re-apply a previously undone state from the redo stack. */
   function redo() {
     if (!canRedo.value || !currentPage.value) return
-    history.value.push(structuredClone(toRaw(currentPage.value)))
+    history.value.push(JSON.parse(JSON.stringify(currentPage.value)))
     _replacePage(future.value.pop()!)
   }
 
@@ -438,7 +438,7 @@ export const usePageStore = defineStore('page', () => {
     if (!currentPage.value || !site.value) return
     if (blockIds.length < 2) return
 
-    const updatedPage: Page = structuredClone(toRaw(currentPage.value))
+    const updatedPage: Page = JSON.parse(JSON.stringify(currentPage.value))
 
     // Collect children in page order (not blockIds order)
     const children = updatedPage.blocks.filter(b => blockIds.includes(b.id))
@@ -482,7 +482,7 @@ export const usePageStore = defineStore('page', () => {
     const idx = (site.value.customComponents ?? []).findIndex(c => c.id === def.id)
     if (idx === -1) return
     _snapshot()
-    site.value.customComponents![idx] = structuredClone(def)
+    site.value.customComponents![idx] = JSON.parse(JSON.stringify(def))
   }
 
   /**
@@ -505,7 +505,7 @@ export const usePageStore = defineStore('page', () => {
     override: Partial<BaseBlock<string, any>>
   ) {
     if (!currentPage.value || !site.value) return
-    const updatedPage: Page = structuredClone(toRaw(currentPage.value))
+    const updatedPage: Page = JSON.parse(JSON.stringify(currentPage.value))
     const block = updatedPage.blocks.find(b => b.id === blockId)
     if (!block || block.type !== 'Composite') return
 
@@ -523,7 +523,7 @@ export const usePageStore = defineStore('page', () => {
    */
   function replaceBlockWithChildren(blockId: string, children: BaseBlock<string, any>[]) {
     if (!currentPage.value || !site.value) return
-    const updatedPage: Page = structuredClone(toRaw(currentPage.value))
+    const updatedPage: Page = JSON.parse(JSON.stringify(currentPage.value))
     const idx = updatedPage.blocks.findIndex(b => b.id === blockId)
     if (idx === -1) return
 
@@ -538,14 +538,14 @@ export const usePageStore = defineStore('page', () => {
   /** Restore the previous layout state from the layout undo stack. */
   function undoLayout() {
     if (!canUndoLayout.value || !site.value) return
-    layoutFuture.value.push(structuredClone(toRaw(site.value.layout)))
+    layoutFuture.value.push(JSON.parse(JSON.stringify(site.value.layout)))
     site.value.layout = layoutHistory.value.pop()!
   }
 
   /** Re-apply a previously undone layout state from the layout redo stack. */
   function redoLayout() {
     if (!canRedoLayout.value || !site.value) return
-    layoutHistory.value.push(structuredClone(toRaw(site.value.layout)))
+    layoutHistory.value.push(JSON.parse(JSON.stringify(site.value.layout)))
     site.value.layout = layoutFuture.value.pop()!
   }
 
