@@ -16,9 +16,7 @@
  * creates separate providers — which is intentional for multi-site use,
  * but for this single-site editor one call is enough.
  */
-import * as Y from 'yjs'
-import { WebsocketProvider } from 'y-websocket'
-import { ref, watch, nextTick, onUnmounted } from 'vue'
+import { ref, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { usePageStore } from '../stores/usePageStore'
 import { sendEditorMessage } from '@cms/contracts'
 import { presenceColorFromId } from '@cms/contracts'
@@ -52,115 +50,125 @@ export function useCollaboration(
   let _suppressSync = false
   let _syncTimer: ReturnType<typeof setTimeout> | null = null
 
-  // ── Yjs document ─────────────────────────────────────────────────────────
-  const ydoc = new Y.Doc()
-  const ysite = ydoc.getMap<Site>('site')
+  // Yjs + WebsocketProvider are browser-only — initialized inside onMounted
+  // so they never run during SSR (which would hang the Nitro request handler).
+  let _stopSiteWatch: (() => void) | null = null
+  let _stopSelectionWatch: (() => void) | null = null
+  let _provider: any = null
 
-  // Seed the Y.Doc with the current Pinia state so the server receives full
-  // site data on the first sync-step-2 exchange.
-  if (store.site) {
-    ydoc.transact(() => {
-      ysite.set('data', JSON.parse(JSON.stringify(store.site)) as Site)
-    })
-  }
-
-  // ── WebSocket provider ────────────────────────────────────────────────────
   const wsBase = (config.public.wsUrl as string | undefined) ?? 'ws://localhost:2999'
-  // WebsocketProvider connects to: ${wsBase}/collaboration/${encodeURIComponent(siteId)}
-  const provider = new WebsocketProvider(
-    `${wsBase}/collaboration`,
-    siteId,
-    ydoc,
-    { connect: true }
-  )
 
-  provider.on('status', (event: { status: string }) => {
-    isConnected.value = event.status === 'connected'
-  })
+  onMounted(async () => {
+    // Dynamic imports keep Yjs / y-websocket out of the SSR bundle entirely.
+    const Y = await import('yjs')
+    const { WebsocketProvider } = await import('y-websocket')
 
-  // ── Awareness: set local state ────────────────────────────────────────────
-  provider.awareness.setLocalStateField('user', localUser.value)
+    // ── Yjs document ───────────────────────────────────────────────────────
+    const ydoc = new Y.Doc()
+    const ysite = ydoc.getMap<Site>('site')
 
-  // ── Awareness: track peers and push PRESENCE_UPDATE to iframe ─────────────
-  provider.awareness.on('change', () => {
-    const peers: UserPresence[] = []
-    provider.awareness.getStates().forEach((state: Record<string, unknown>, clientId: number) => {
-      if (clientId !== provider.awareness.clientID && state.user) {
-        peers.push(state.user as UserPresence)
+    // Seed the Y.Doc with the current Pinia state so the server receives full
+    // site data on the first sync-step-2 exchange.
+    if (store.site) {
+      ydoc.transact(() => {
+        ysite.set('data', JSON.parse(JSON.stringify(store.site)) as Site)
+      })
+    }
+
+    // ── WebSocket provider ─────────────────────────────────────────────────
+    _provider = new WebsocketProvider(
+      `${wsBase}/collaboration`,
+      siteId,
+      ydoc,
+      { connect: true }
+    )
+
+    _provider.on('status', (event: { status: string }) => {
+      isConnected.value = event.status === 'connected'
+    })
+
+    // ── Awareness: set local state ─────────────────────────────────────────
+    _provider.awareness.setLocalStateField('user', localUser.value)
+
+    // ── Awareness: track peers and push PRESENCE_UPDATE to iframe ──────────
+    _provider.awareness.on('change', () => {
+      const peers: UserPresence[] = []
+      _provider.awareness.getStates().forEach((state: Record<string, unknown>, clientId: number) => {
+        if (clientId !== _provider.awareness.clientID && state.user) {
+          peers.push(state.user as UserPresence)
+        }
+      })
+      connectedUsers.value = peers
+
+      const iframe = previewFrameRef.value
+      if (iframe?.contentWindow) {
+        sendEditorMessage(
+          iframe.contentWindow,
+          { type: 'PRESENCE_UPDATE', payload: peers },
+          '*'
+        )
       }
     })
-    connectedUsers.value = peers
 
-    // Push presence to runtime iframe so SelectableBlock can show peer colours
-    const iframe = previewFrameRef.value
-    if (iframe?.contentWindow) {
-      sendEditorMessage(
-        iframe.contentWindow,
-        { type: 'PRESENCE_UPDATE', payload: peers },
-        '*'
-      )
-    }
-  })
+    // ── Remote Yjs update → Pinia store ───────────────────────────────────
+    ysite.observe(() => {
+      if (_suppressSync) return
+      const remoteData = ysite.get('data')
+      if (!remoteData) return
+      if (JSON.stringify(remoteData) === JSON.stringify(store.site)) return
 
-  // ── Remote Yjs update → Pinia store ──────────────────────────────────────
-  ysite.observe(() => {
-    if (_suppressSync) return
-    const remoteData = ysite.get('data')
-    if (!remoteData) return
-    if (JSON.stringify(remoteData) === JSON.stringify(store.site)) return
+      _suppressSync = true
+      store.setSite(JSON.parse(JSON.stringify(remoteData)))
+      nextTick(() => { _suppressSync = false })
+    })
 
-    _suppressSync = true
-    store.setSite(JSON.parse(JSON.stringify(remoteData)))
-    // Reset flag after Vue has flushed all watchers triggered by setSite()
-    nextTick(() => { _suppressSync = false })
-  })
+    // ── Local store change → Yjs (debounced 100 ms) ────────────────────────
+    _stopSiteWatch = watch(
+      () => store.site,
+      (newSite) => {
+        if (_suppressSync || !newSite) return
+        if (_syncTimer) clearTimeout(_syncTimer)
+        _syncTimer = setTimeout(() => {
+          _syncTimer = null
+          if (_suppressSync) return
+          _suppressSync = true
+          ydoc.transact(() => {
+            ysite.set('data', JSON.parse(JSON.stringify(newSite)) as Site)
+          })
+          _suppressSync = false
+        }, 100)
+      },
+      { deep: true }
+    )
 
-  // ── Local store change → Yjs (debounced 100 ms) ───────────────────────────
-  const stopSiteWatch = watch(
-    () => store.site,
-    (newSite) => {
-      if (_suppressSync || !newSite) return
-      if (_syncTimer) clearTimeout(_syncTimer)
-      _syncTimer = setTimeout(() => {
-        _syncTimer = null
-        if (_suppressSync) return // check again after debounce
-        _suppressSync = true
-        ydoc.transact(() => {
-          ysite.set('data', JSON.parse(JSON.stringify(newSite)) as Site)
-        })
-        _suppressSync = false
-      }, 100)
-    },
-    { deep: true }
-  )
-
-  // ── Selection changes → awareness ─────────────────────────────────────────
-  const stopSelectionWatch = watch(
-    [() => store.selectedBlockId, () => store.selectedLayoutBlockId],
-    ([blockId, layoutBlockId]) => {
-      const updated: UserPresence = {
-        ...localUser.value,
-        selectedBlockId: blockId,
-        selectedLayoutBlockId: layoutBlockId as 'header' | 'footer' | null,
-        lastSeen: Date.now()
+    // ── Selection changes → awareness ──────────────────────────────────────
+    _stopSelectionWatch = watch(
+      [() => store.selectedBlockId, () => store.selectedLayoutBlockId],
+      ([blockId, layoutBlockId]) => {
+        const updated: UserPresence = {
+          ...localUser.value,
+          selectedBlockId: blockId,
+          selectedLayoutBlockId: layoutBlockId as 'header' | 'footer' | null,
+          lastSeen: Date.now()
+        }
+        localUser.value = updated
+        _provider.awareness.setLocalStateField('user', updated)
       }
-      localUser.value = updated
-      provider.awareness.setLocalStateField('user', updated)
-    }
-  )
+    )
+  })
 
   // ── Cleanup ───────────────────────────────────────────────────────────────
   onUnmounted(() => {
-    stopSiteWatch()
-    stopSelectionWatch()
+    _stopSiteWatch?.()
+    _stopSelectionWatch?.()
     if (_syncTimer) clearTimeout(_syncTimer)
-    provider.destroy()
+    _provider?.destroy()
   })
 
   return {
     isConnected,
     connectedUsers,
     localUser,
-    provider
+    get provider() { return _provider }
   }
 }
