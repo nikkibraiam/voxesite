@@ -17,6 +17,9 @@ export type EditorMessage =
   | { type: 'AI_PATCH'; payload: Partial<Page> }
   | { type: 'LAYOUT_UPDATE'; payload: SiteLayout }
   | { type: 'LAYOUT_BLOCK_SELECT'; payload: { slot: 'header' | 'footer' | null } }
+  // Drag-and-drop reorder — sent from the runtime iframe when the user drags a
+  // block handle and drops it onto a different block; editor calls reorderBlocks().
+  | { type: 'BLOCK_REORDER'; payload: { sourceId: string; targetId: string } }
   // Presence — editor broadcasts connected-users' awareness to the runtime iframe
   // so SelectableBlock can highlight blocks selected by other users.
   | { type: 'PRESENCE_UPDATE'; payload: UserPresence[] }
@@ -41,6 +44,7 @@ export function isEditorMessage(data: unknown): data is EditorMessage {
       'AI_PATCH',
       'LAYOUT_UPDATE',
       'LAYOUT_BLOCK_SELECT',
+      'BLOCK_REORDER',
       'PRESENCE_UPDATE',
       'VOICE_INPUT',
       'VOICE_TRANSCRIPT',

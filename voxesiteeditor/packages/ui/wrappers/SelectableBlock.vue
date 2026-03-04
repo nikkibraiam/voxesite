@@ -4,15 +4,41 @@ const props = defineProps<{
   enabled?: boolean
   /** When set, renders a coloured left-border to indicate a remote peer's selection. */
   peer?: { color: string; displayName: string } | null
+  /**
+   * Enables HTML5 drag-and-drop events for reordering inside the runtime iframe.
+   * Keep false (default) in the editor sidebar where SortableJS handles dragging.
+   */
+  enableDrag?: boolean
 }>()
 
 const emit = defineEmits<{
   (e: 'select', id: string): void
+  (e: 'drag-start', id: string): void
+  (e: 'drag-over', id: string): void
+  (e: 'drop', id: string): void
 }>()
 
 function onClick() {
   if (!props.enabled) return
   emit('select', props.blockId)
+}
+
+function onDragStart(e: DragEvent) {
+  if (!props.enableDrag) return
+  e.dataTransfer?.setData('text/plain', props.blockId)
+  emit('drag-start', props.blockId)
+}
+
+function onDragOver(e: DragEvent) {
+  if (!props.enableDrag) return
+  e.preventDefault()
+  emit('drag-over', props.blockId)
+}
+
+function onDrop(e: DragEvent) {
+  if (!props.enableDrag) return
+  e.preventDefault()
+  emit('drop', props.blockId)
 }
 </script>
 
@@ -24,14 +50,20 @@ function onClick() {
     :style="peer ? { '--peer-color': peer.color } : {}"
     :title="peer ? `${peer.displayName} está editando este bloque` : undefined"
     @click.stop="onClick"
+    @dragover="onDragOver"
+    @drop="onDrop"
   >
     <!--
       Drag handle — always visible on touch devices, visible on hover on desktop.
-      @pointerdown.stop prevents the click-to-select logic from firing when the
-      user grabs the handle. touch-action:none (set in CSS) is required so the
-      WebView does not intercept the touch event for page scrolling.
+      When enableDrag is true the handle is HTML5-draggable (runtime iframe mode).
+      SortableJS in the editor sidebar uses pointer events and ignores draggable.
     -->
-    <div class="drag-handle" aria-hidden="true">
+    <div
+      class="drag-handle"
+      aria-hidden="true"
+      :draggable="enableDrag || undefined"
+      @dragstart.stop="onDragStart"
+    >
       <svg
         width="16"
         height="16"

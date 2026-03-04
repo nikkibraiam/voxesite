@@ -113,6 +113,26 @@ function onBlockSelect(blockId: string) {
   )
 }
 
+// ─── Drag-and-drop reordering (editor mode only) ─────────────────────────────
+// HTML5 drag events fire inside the iframe; we relay the result to the editor
+// via BLOCK_REORDER so it can call store.reorderBlocks() with the correct indices.
+const _dragSourceId = ref<string | null>(null)
+
+function onBlockDragStart(blockId: string) {
+  _dragSourceId.value = blockId
+}
+
+function onBlockDrop(blockId: string) {
+  if (!_dragSourceId.value || !isEditor.value) return
+  if (_dragSourceId.value === blockId) { _dragSourceId.value = null; return }
+  sendEditorMessage(
+    window.parent,
+    { type: 'BLOCK_REORDER', payload: { sourceId: _dragSourceId.value, targetId: blockId } },
+    EDITOR_ORIGIN
+  )
+  _dragSourceId.value = null
+}
+
 // ─── Layout block selection ──────────────────────────────────────────────────
 function onLayoutBlockSelect(slot: 'header' | 'footer') {
   if (!isEditor.value) return
@@ -212,8 +232,11 @@ onMounted(() => {
       v-if="isEditor"
       :block-id="block.id"
       enabled
+      :enable-drag="true"
       :peer="peerForBlock(block.id)"
       @select="onBlockSelect"
+      @drag-start="onBlockDragStart"
+      @drop="onBlockDrop"
     >
       <component :is="renderBlock(block, { site: site ?? undefined })" v-bind="block.props" />
     </SelectableBlock>

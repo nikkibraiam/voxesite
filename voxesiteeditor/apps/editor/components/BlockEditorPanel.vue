@@ -5,6 +5,7 @@ import { BlockSchemas, LayoutSchemas } from '@cms/ui/schemas'
 import type { BaseBlock, CompositeBlockDefinition } from '@cms/contracts'
 import { usePageStore } from '../stores/usePageStore'
 import { useBlockEditorPanel } from '../composables/useBlockEditorPanel'
+import ArrayField from './ArrayField.vue'
 
 const store = usePageStore()
 const { isPanelOpen } = useBlockEditorPanel()
@@ -127,22 +128,26 @@ function rebuildPane() {
   const contentFolder = pane.addFolder({ title: 'Contenido', expanded: true })
 
   for (const field of schema.value.content.fields as any[]) {
-    if (field.type === 'json' || field.type === 'css') continue
+    if (field.type === 'json' || field.type === 'css' || field.type === 'array') continue
 
-    if (draft.value.props[field.key] === undefined || draft.value.props[field.key] === null) {
-      if (field.type === 'boolean') draft.value.props[field.key] = false
-      else if (field.type === 'color') draft.value.props[field.key] = '#000000'
-      else draft.value.props[field.key] = ''
+    if (field.type === 'color') {
+      // Use a proxy so Tweakpane displays a neutral default without writing
+      // '#000000' into draft.props before the user explicitly sets a color.
+      const colorProxy: Record<string, string> = {
+        [field.key]: (draft.value.props[field.key] as string) || '#ffffff'
+      }
+      const binding = contentFolder.addBinding(colorProxy, field.key, { label: field.label, view: 'color' })
+      binding.on('change', ({ value }: { value: string }) => {
+        draft.value!.props[field.key] = value
+        _dispatchLive()
+      })
+    } else {
+      if (draft.value.props[field.key] === undefined || draft.value.props[field.key] === null) {
+        draft.value.props[field.key] = field.type === 'boolean' ? false : ''
+      }
+      const binding = contentFolder.addBinding(draft.value.props, field.key, { label: field.label })
+      binding.on('change', () => _dispatchLive())
     }
-    if (field.type === 'color' && !draft.value.props[field.key]) {
-      draft.value.props[field.key] = '#000000'
-    }
-
-    const params: Record<string, unknown> = { label: field.label }
-    if (field.type === 'color') params.view = 'color'
-
-    const binding = contentFolder.addBinding(draft.value.props, field.key, params)
-    binding.on('change', () => _dispatchLive())
   }
 
   // ── Style groups ────────────────────────────────────────────────────────
@@ -156,17 +161,24 @@ function rebuildPane() {
         const selector: string = field.selector ?? ''
         const cssProp: string = field.cssProperty
 
-        if (!draft.value.styles[selector]) draft.value.styles[selector] = {}
-        if (!draft.value.styles[selector][cssProp]) {
-          draft.value.styles[selector][cssProp] = field.type === 'color' ? '#000000' : ''
+        if (!draft.value.styles![selector]) draft.value.styles![selector] = {}
+        const selectorStyles = draft.value.styles![selector] as Record<string, any>
+
+        if (field.type === 'color') {
+          // Proxy keeps '#000000' out of the stored styles until user changes it
+          const colorProxy: Record<string, string> = {
+            [cssProp]: (selectorStyles[cssProp] as string) || '#ffffff'
+          }
+          const binding = styleFolder.addBinding(colorProxy, cssProp, { label: field.label, view: 'color' })
+          binding.on('change', ({ value }: { value: string }) => {
+            selectorStyles[cssProp] = value
+            _dispatchLive()
+          })
+        } else {
+          if (!selectorStyles[cssProp]) selectorStyles[cssProp] = ''
+          const binding = styleFolder.addBinding(selectorStyles, cssProp, { label: field.label })
+          binding.on('change', () => _dispatchLive())
         }
-
-        const styleProxy = draft.value.styles[selector]
-        const params: Record<string, unknown> = { label: field.label }
-        if (field.type === 'color') params.view = 'color'
-
-        const binding = styleFolder.addBinding(styleProxy, cssProp, params)
-        binding.on('change', () => _dispatchLive())
       }
     }
   }
@@ -205,19 +217,24 @@ function rebuildChildPane() {
   const folder = childPane.addFolder({ title: 'Overrides', expanded: true })
 
   for (const field of childSchema.value.content.fields as any[]) {
-    if (field.type === 'json' || field.type === 'css') continue
+    if (field.type === 'json' || field.type === 'css' || field.type === 'array') continue
 
-    if (draftChildProps.value[field.key] === undefined || draftChildProps.value[field.key] === null) {
-      if (field.type === 'boolean') draftChildProps.value[field.key] = false
-      else if (field.type === 'color') draftChildProps.value[field.key] = '#000000'
-      else draftChildProps.value[field.key] = ''
+    if (field.type === 'color') {
+      const colorProxy: Record<string, string> = {
+        [field.key]: (draftChildProps.value[field.key] as string) || '#ffffff'
+      }
+      const binding = folder.addBinding(colorProxy, field.key, { label: field.label, view: 'color' })
+      binding.on('change', ({ value }: { value: string }) => {
+        draftChildProps.value[field.key] = value
+        _dispatchChildOverride()
+      })
+    } else {
+      if (draftChildProps.value[field.key] === undefined || draftChildProps.value[field.key] === null) {
+        draftChildProps.value[field.key] = field.type === 'boolean' ? false : ''
+      }
+      const binding = folder.addBinding(draftChildProps.value, field.key, { label: field.label })
+      binding.on('change', () => _dispatchChildOverride())
     }
-
-    const params: Record<string, unknown> = { label: field.label }
-    if (field.type === 'color') params.view = 'color'
-
-    const binding = folder.addBinding(draftChildProps.value, field.key, params)
-    binding.on('change', () => _dispatchChildOverride())
   }
 }
 

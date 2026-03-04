@@ -187,6 +187,17 @@ export function usePageEditor() {
         store.selectBlock(null)
         store.selectLayoutBlock(event.data.payload.slot)
       }
+
+      if (event.data.type === 'BLOCK_REORDER') {
+        // User dragged a block handle in the iframe preview — reorder in the store
+        const { sourceId, targetId } = event.data.payload
+        const blocks = store.currentPage?.blocks ?? []
+        const fromIndex = blocks.findIndex(b => b.id === sourceId)
+        const toIndex = blocks.findIndex(b => b.id === targetId)
+        if (fromIndex !== -1 && toIndex !== -1 && fromIndex !== toIndex) {
+          store.reorderBlocks(fromIndex, toIndex)
+        }
+      }
     })
   })
 

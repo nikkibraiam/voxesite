@@ -130,7 +130,11 @@ function toggleMic() {
 <style scoped>
 /* ── Panel container ────────────────────────────────────────────────────────── */
 .ai-panel {
-  flex-shrink: 0;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 50;
   display: flex;
   flex-direction: column;
   background: #1a1a2e;
