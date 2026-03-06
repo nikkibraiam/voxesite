@@ -57,6 +57,7 @@ import { FooterSchema } from './layout/footer.schema'
 import { ColorStylesSchema } from './styles/colors.schema'
 import { TypographyStylesSchema } from './styles/typography.schema'
 import { SpacingStylesSchema } from './styles/spacing.schema'
+import { GridStylesSchema } from './styles/grid.schema'
 
 /**
  * BlockSchemas — keyed by block type.
@@ -68,45 +69,45 @@ import { SpacingStylesSchema } from './styles/spacing.schema'
 export const BlockSchemas: Record<string, any> = {
   // ── Original blocks ───────────────────────────────────────────────────────
   Hero:        { content: HeroSchema,        styles: [ColorStylesSchema, TypographyStylesSchema, SpacingStylesSchema] },
-  TextBlock:   { content: TextBlockSchema,   styles: [ColorStylesSchema, TypographyStylesSchema] },
+  TextBlock:   { content: TextBlockSchema,   styles: [ColorStylesSchema, TypographyStylesSchema, SpacingStylesSchema] },
   FormBlock:   { content: FormSchema,        styles: [ColorStylesSchema, SpacingStylesSchema] },
 
   // ── Tier 1 ────────────────────────────────────────────────────────────────
-  CardGrid:      { content: CardGridSchema,      styles: [ColorStylesSchema] },
-  ImageGallery:  { content: ImageGallerySchema,  styles: [ColorStylesSchema] },
-  CTABanner:     { content: CTABannerSchema,     styles: [ColorStylesSchema] },
-  Testimonials:  { content: TestimonialsSchema,  styles: [ColorStylesSchema] },
-  Features:      { content: FeaturesSchema,      styles: [ColorStylesSchema] },
-  PricingTable:  { content: PricingTableSchema,  styles: [ColorStylesSchema] },
-  FAQ:           { content: FAQSchema,           styles: [ColorStylesSchema] },
-  ContactInfo:   { content: ContactInfoSchema,   styles: [ColorStylesSchema] },
+  CardGrid:      { content: CardGridSchema,      styles: [ColorStylesSchema, TypographyStylesSchema, GridStylesSchema] },
+  ImageGallery:  { content: ImageGallerySchema,  styles: [ColorStylesSchema, SpacingStylesSchema] },
+  CTABanner:     { content: CTABannerSchema,     styles: [ColorStylesSchema, TypographyStylesSchema] },
+  Testimonials:  { content: TestimonialsSchema,  styles: [ColorStylesSchema, TypographyStylesSchema] },
+  Features:      { content: FeaturesSchema,      styles: [ColorStylesSchema, TypographyStylesSchema, GridStylesSchema] },
+  PricingTable:  { content: PricingTableSchema,  styles: [ColorStylesSchema, TypographyStylesSchema] },
+  FAQ:           { content: FAQSchema,           styles: [ColorStylesSchema, TypographyStylesSchema] },
+  ContactInfo:   { content: ContactInfoSchema,   styles: [ColorStylesSchema, TypographyStylesSchema] },
 
   // ── Tier 2 ────────────────────────────────────────────────────────────────
-  Flyer:       { content: FlyerSchema,       styles: [ColorStylesSchema] },
+  Flyer:       { content: FlyerSchema,       styles: [ColorStylesSchema, TypographyStylesSchema] },
   VideoEmbed:  { content: VideoEmbedSchema,  styles: [SpacingStylesSchema] },
-  Countdown:   { content: CountdownSchema,   styles: [ColorStylesSchema] },
-  StatsBanner: { content: StatsBannerSchema, styles: [ColorStylesSchema] },
-  TeamSection: { content: TeamSectionSchema, styles: [ColorStylesSchema] },
-  LogoCloud:   { content: LogoCloudSchema,   styles: [ColorStylesSchema] },
-  Timeline:    { content: TimelineSchema,    styles: [ColorStylesSchema] },
-  Breadcrumb:  { content: BreadcrumbSchema,  styles: [] },
+  Countdown:   { content: CountdownSchema,   styles: [ColorStylesSchema, TypographyStylesSchema] },
+  StatsBanner: { content: StatsBannerSchema, styles: [ColorStylesSchema, TypographyStylesSchema] },
+  TeamSection: { content: TeamSectionSchema, styles: [ColorStylesSchema, TypographyStylesSchema, GridStylesSchema] },
+  LogoCloud:   { content: LogoCloudSchema,   styles: [ColorStylesSchema, SpacingStylesSchema] },
+  Timeline:    { content: TimelineSchema,    styles: [ColorStylesSchema, TypographyStylesSchema] },
+  Breadcrumb:  { content: BreadcrumbSchema,  styles: [ColorStylesSchema, TypographyStylesSchema] },
 
   // ── Tier 3 ────────────────────────────────────────────────────────────────
-  ProductCard:      { content: ProductCardSchema,      styles: [ColorStylesSchema] },
-  ProductGrid:      { content: ProductGridSchema,      styles: [ColorStylesSchema] },
-  ProductDetail:    { content: ProductDetailSchema,    styles: [ColorStylesSchema] },
-  MapEmbed:         { content: MapEmbedSchema,         styles: [] },
-  NewsletterSignup: { content: NewsletterSignupSchema, styles: [ColorStylesSchema] },
-  SearchBar:        { content: SearchBarSchema,        styles: [] },
-  Accordion:        { content: AccordionSchema,        styles: [] },
-  Tabs:             { content: TabsSchema,             styles: [] },
-  Carousel:         { content: CarouselSchema,         styles: [] },
-  Table:            { content: TableSchema,            styles: [] },
-  CodeBlock:        { content: CodeBlockSchema,        styles: [] },
-  Divider:          { content: DividerSchema,          styles: [] },
-  Spacer:           { content: SpacerSchema,           styles: [] },
-  Alert:            { content: AlertSchema,            styles: [] },
-  ProgressBar:      { content: ProgressBarSchema,      styles: [] },
+  ProductCard:      { content: ProductCardSchema,      styles: [ColorStylesSchema, TypographyStylesSchema] },
+  ProductGrid:      { content: ProductGridSchema,      styles: [ColorStylesSchema, GridStylesSchema] },
+  ProductDetail:    { content: ProductDetailSchema,    styles: [ColorStylesSchema, TypographyStylesSchema] },
+  MapEmbed:         { content: MapEmbedSchema,         styles: [SpacingStylesSchema] },
+  NewsletterSignup: { content: NewsletterSignupSchema, styles: [ColorStylesSchema, TypographyStylesSchema] },
+  SearchBar:        { content: SearchBarSchema,        styles: [ColorStylesSchema, SpacingStylesSchema] },
+  Accordion:        { content: AccordionSchema,        styles: [ColorStylesSchema, TypographyStylesSchema] },
+  Tabs:             { content: TabsSchema,             styles: [ColorStylesSchema, TypographyStylesSchema] },
+  Carousel:         { content: CarouselSchema,         styles: [ColorStylesSchema, TypographyStylesSchema] },
+  Table:            { content: TableSchema,            styles: [ColorStylesSchema, TypographyStylesSchema] },
+  CodeBlock:        { content: CodeBlockSchema,        styles: [ColorStylesSchema, SpacingStylesSchema] },
+  Divider:          { content: DividerSchema,          styles: [ColorStylesSchema, SpacingStylesSchema] },
+  Spacer:           { content: SpacerSchema,           styles: [SpacingStylesSchema] },
+  Alert:            { content: AlertSchema,            styles: [ColorStylesSchema, TypographyStylesSchema] },
+  ProgressBar:      { content: ProgressBarSchema,      styles: [ColorStylesSchema] },
 
   // ── Composite (special-cased in renderer, no "Add block" button) ──────────
   Composite: { content: CompositeSchema, styles: [] },
@@ -122,3 +123,4 @@ export const LayoutSchemas: Record<string, any> = {
 }
 
 export { HeaderSchema, FooterSchema }
+export { ColorStylesSchema, TypographyStylesSchema, SpacingStylesSchema, GridStylesSchema }

@@ -67,6 +67,18 @@ const textareaFields = computed(() => {
   )
 })
 
+/** Style group fields of type 'align' — rendered as 4-button toggles outside Tweakpane. */
+const alignFields = computed(() => {
+  if (!schema.value?.styles?.length) return []
+  const result: Array<{ group: string; field: any }> = []
+  for (const group of schema.value.styles as any[]) {
+    for (const field of group.fields as any[]) {
+      if (field.type === 'align') result.push({ group: group.group, field })
+    }
+  }
+  return result
+})
+
 /** Schema content fields rendered by ArrayField (type: 'array'). */
 const arrayFields = computed(() => {
   if (!schema.value) return []
@@ -164,6 +176,9 @@ function rebuildPane() {
       if (!draft.value.styles) draft.value.styles = {}
 
       for (const field of group.fields as any[]) {
+        // 'align' fields are rendered as button groups in the template, not via Tweakpane
+        if (field.type === 'align') continue
+
         const selector: string = field.selector ?? ''
         const cssProp: string = field.cssProperty
 
@@ -316,6 +331,26 @@ function onCssInput(key: string, event: Event) {
 function getCssValue(key: string): string {
   if (!draft.value) return ''
   return (draft.value as Record<string, any>)[key] ?? ''
+}
+
+// ─── Text alignment helpers (type: 'align' style fields) ─────────────────────
+
+const ALIGN_VALUES = ['left', 'center', 'right', 'justify'] as const
+type AlignValue = typeof ALIGN_VALUES[number]
+
+function getAlign(field: any): AlignValue | '' {
+  if (!draft.value?.styles) return ''
+  const selector: string = field.selector ?? ''
+  return (draft.value.styles[selector]?.[field.cssProperty] as AlignValue) ?? ''
+}
+
+function setAlign(field: any, value: AlignValue) {
+  if (!draft.value) return
+  const selector: string = field.selector ?? ''
+  if (!draft.value.styles) draft.value.styles = {}
+  if (!draft.value.styles[selector]) draft.value.styles[selector] = {}
+  draft.value.styles[selector][field.cssProperty] = value
+  _dispatchLive()
 }
 
 // ─── Ungroup ─────────────────────────────────────────────────────────────────
@@ -496,6 +531,32 @@ onUnmounted(() => {
 
         <!-- Tweakpane mount point — string/boolean/color fields rendered here -->
         <div ref="paneContainer" class="pane-container" />
+
+        <!-- Text alignment toggle buttons (type: 'align' style fields) -->
+        <div
+          v-for="{ field } in alignFields"
+          :key="field.cssProperty"
+          class="align-field"
+        >
+          <span class="align-label">{{ field.label }}</span>
+          <div class="align-buttons" role="group" :aria-label="field.label">
+            <button
+              v-for="val in ['left', 'center', 'right', 'justify']"
+              :key="val"
+              type="button"
+              class="align-btn"
+              :class="{ 'align-btn--active': getAlign(field) === val }"
+              :title="val"
+              :aria-pressed="getAlign(field) === val"
+              @click="setAlign(field, val as any)"
+            >
+              <svg v-if="val === 'left'" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="15" y2="12"/><line x1="3" y1="18" x2="18" y2="18"/></svg>
+              <svg v-else-if="val === 'center'" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="6" y1="12" x2="18" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></svg>
+              <svg v-else-if="val === 'right'" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="9" y1="12" x2="21" y2="12"/><line x1="6" y1="18" x2="21" y2="18"/></svg>
+              <svg v-else-if="val === 'justify'" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+            </button>
+          </div>
+        </div>
 
         <!-- Structured array editors (type: 'array') -->
         <div
@@ -835,5 +896,52 @@ onUnmounted(() => {
 .backdrop-enter-from,
 .backdrop-leave-to {
   opacity: 0;
+}
+
+/* ── Text alignment toggle ───────────────────────────────────────────────────── */
+.align-field {
+  padding: 10px 12px;
+  border-top: 1px solid #2a2a2a;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.align-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #888;
+}
+
+.align-buttons {
+  display: flex;
+  gap: 4px;
+}
+
+.align-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid #333;
+  background: #111;
+  color: #888;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+
+.align-btn:hover {
+  background: #2a2a2a;
+  color: #ddd;
+}
+
+.align-btn--active {
+  background: #1d3a5e;
+  border-color: #3b82f6;
+  color: #93c5fd;
 }
 </style>

@@ -5,7 +5,7 @@ export const ColorStylesSchema = {
       key: 'textColor',
       label: 'Color de texto',
       type: 'color',
-      selector: '.text, .hero__title, .hero__subtitle',
+      selector: '',
       cssProperty: 'color'
     },
     {

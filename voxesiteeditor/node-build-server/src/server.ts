@@ -17,7 +17,8 @@ import { createTranscriptionAdapter } from './transcription/whisperAdapter'
 import { fetchUrlContent } from './pageGenerator/urlFetcher'
 import { prepareScreenshot } from './pageGenerator/screenshotHandler'
 import { sanitizeHtml } from './pageGenerator/htmlSanitizer'
-import { generatePage } from './pageGenerator/pageGeneratorService'
+import { runSiteCloneAgent } from './agents/SiteCloneAgent'
+import { buildSiteBuilderPrompt } from './agents/SiteBuilderAgent'
 import { setupCollaborationServer } from './collaboration/yjsServer'
 import { pool } from './db/client'
 import { handleFormSubmit } from './formEndpoints/proxyHandler'
@@ -194,7 +195,7 @@ app.post('/api/ai/prompt', async (req, res) => {
   const messages: LLMMessage[] = [
     {
       role: 'system',
-      content: buildSystemPrompt(schemaContext, pageJson)
+      content: buildSiteBuilderPrompt(schemaContext, pageJson)
     },
     {
       role: 'user',
@@ -237,23 +238,6 @@ app.post('/api/ai/prompt', async (req, res) => {
   }
 })
 
-function buildSystemPrompt(schemaContext: string, pageJson: any): string {
-  return `You are a CMS block editor assistant. The user will describe changes they want to make to a website page.
-You must return ONLY a valid JSON object matching the Page schema. No explanation, no markdown fences, no code blocks.
-
-Available block types and their schemas:
-${schemaContext}
-
-Current page JSON:
-${JSON.stringify(pageJson, null, 2)}
-
-Rules:
-- Return the complete updated Page JSON, not a diff
-- Preserve all block IDs unless explicitly asked to remove a block
-- Only modify props and styles mentioned by the user
-- Do not invent new block types not listed in the schemas above
-- If unsure, return the page unchanged`
-}
 
 // ─── Page generation routes ───────────────────────────────────────────────────
 //
@@ -279,7 +263,7 @@ async function handleGenerate(
   if (wantsStream) {
     sseHeaders(res)
     try {
-      const page = await generatePage({
+      const page = await runSiteCloneAgent({
         schemaContext,
         textInput,
         image,
@@ -293,7 +277,7 @@ async function handleGenerate(
     }
   } else {
     try {
-      const page = await generatePage({ schemaContext, textInput, image })
+      const page = await runSiteCloneAgent({ schemaContext, textInput, image })
       res.json({ ok: true, page })
     } catch (err: any) {
       res.status(500).json({ ok: false, error: err.message ?? 'Generation failed', raw: err.raw })
