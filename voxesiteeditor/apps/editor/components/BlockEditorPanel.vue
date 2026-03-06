@@ -67,6 +67,12 @@ const textareaFields = computed(() => {
   )
 })
 
+/** Schema content fields rendered by ArrayField (type: 'array'). */
+const arrayFields = computed(() => {
+  if (!schema.value) return []
+  return (schema.value.content.fields as any[]).filter((f: any) => f.type === 'array')
+})
+
 /** Textarea fields for the selected child block in composite mode. */
 const childTextareaFields = computed(() => {
   if (!childSchema.value) return []
@@ -491,7 +497,21 @@ onUnmounted(() => {
         <!-- Tweakpane mount point — string/boolean/color fields rendered here -->
         <div ref="paneContainer" class="pane-container" />
 
-        <!-- Plain textareas for json and css fields -->
+        <!-- Structured array editors (type: 'array') -->
+        <div
+          v-for="field in arrayFields"
+          :key="field.key"
+          class="textarea-field"
+        >
+          <ArrayField
+            :label="field.label"
+            :value="draft?.props[field.key]"
+            :subfields="field.subfields"
+            @update:value="(v: any[]) => { if (draft) { draft.props[field.key] = v; _dispatchLive() } }"
+          />
+        </div>
+
+        <!-- Plain textareas for json and css fields (legacy / advanced) -->
         <div
           v-for="field in textareaFields"
           :key="field.key"

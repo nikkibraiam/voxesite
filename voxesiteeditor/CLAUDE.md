@@ -77,6 +77,7 @@ voxesiteeditor/
 | `apps/editor/composables/usePageGenerator.ts` | ✅ Three-flow generation composable — `isModalOpen`, `generateFromUrl/Screenshot/Html`, slug deduplication |
 | `apps/editor/components/GeneratePageModal.vue` | ✅ Three-tab modal (URL / Captura / HTML) with loading, streaming output, error display |
 | `apps/editor/composables/useVoiceInput.ts` | ✅ WebSocket manager for voice transcription — listens for `VOICE_INPUT` postMessages from native, forwards audio to WS, streams `liveTranscript`, populates `aiPrompt` on `TRANSCRIPT_DONE` |
+| `apps/editor/components/ArrayField.vue` | ✅ Reusable array field editor — structured add/remove/reorder UI for `type: 'array'` schema fields; accepts `subfields?: SubfieldDef[]` for typed sub-forms; normalizes JSON strings for backward compat |
 | `packages/contracts/blocks/form.ts` | ✅ `FieldType`, `FormField`, `FieldCondition`, `FormProps` — form block types |
 | `packages/ui/schemas/blocks/form.schema.ts` | ✅ `FormSchema` — registered in `BlockSchemas` registry; `fields` as `type: 'json'` |
 | `packages/ui/components/FormBlock.vue` | ✅ Dynamic form renderer — all field types, conditional visibility, submit proxy |
@@ -525,7 +526,9 @@ Implications:
 - CSS is always generated via `generateBlockCss.ts` — never write block styles inline
 - All LLM calls go through the `LLMAdapter` interface — never call LLM APIs directly from components
 - Layout block props use **flat keys** (no nested objects) so `BlockEditorModal` can bind them with `draft.props[field.key]` directly
-- Complex array props (`navLinks`, `columns`) use `type: 'json'` in the schema — the component must accept both Array and JSON string at runtime
+- **Schema field types for array props:** use `type: 'array'` with `subfields: [{ key, label, type }]` for flat-object arrays (e.g. `navLinks`, `products`, `cards`); the `BlockEditorPanel` renders these via `ArrayField.vue` — never use `type: 'json'` for arrays that have a known, flat shape. Reserve `type: 'json'` only for deeply nested structures (e.g. `columns[].links[]`), 2D arrays, or flat key-value objects (not arrays). Block components must still accept both Array and JSON string at runtime for backward compat.
+- **Color fields in `BlockEditorPanel`:** never initialize undefined color props to `#000000`. Use a Tweakpane proxy object holding `'#ffffff'` as a visual default; only write to `draft.value.props[field.key]` inside the Tweakpane `change` event handler — never before it. This prevents dark defaults from being silently committed on panel open/close.
+- **Preview-area drag-and-drop:** the iframe is a cross-document boundary; SortableJS cannot reach into it. Use HTML5 drag events (`draggable`, `dragstart`, `dragover`, `drop`) on `SelectableBlock` (enabled via `enableDrag` prop) inside the runtime, and relay via `BLOCK_REORDER` postMessage to the editor; `usePageEditor` message listener calls `store.reorderBlocks()`. `enableDrag` must be `false` (default) in the editor sidebar to avoid conflicting with SortableJS pointer events.
 - **Page generation routes** on node-build-server: `POST /api/:siteId/generate/url`, `POST /api/:siteId/generate/screenshot`, `POST /api/:siteId/generate/html` — all require `schemaContext` in body (injected by Nuxt proxy)
 - **Vision capability** is checked via `isVisionCapable()` from `node-build-server/src/llm/factory.ts` before sending image data to the LLM — screenshot route returns HTTP 400 for text-only models
 
@@ -570,3 +573,19 @@ Implications:
 
 ### Architectural note — composable singleton pattern
 When a composable's state must be shared across multiple component instances (e.g. a panel open/close toggle that is driven from one component but rendered in another), declare the shared `ref()`s at **module level** (outside the exported function). Component-specific things like `useTemplateRef` stay inside the function. This is the standard Vue 3 singleton-composable pattern and is already used implicitly by Pinia stores.
+
+### BUG-06 — AI Panel renders below the viewport (not visible without scrolling)
+- **Root cause:** `<AiPromptPanel />` was placed outside `.editor-shell` (which has `height: 100vh; overflow: hidden`). The panel rendered as a normal flow element below the shell — only visible after scrolling down past 100vh.
+- **Fix:** Changed `.ai-panel` CSS to `position: fixed; bottom: 0; left: 0; right: 0; z-index: 50` so it sticks to the viewport regardless of scroll position. The flex-column layout inside the editor shell (`flex: 1; overflow: hidden` on `.preview-area`) was unaffected.
+
+### BUG-07 — Opening BlockEditorPanel silently sets undefined color props to `#000000`
+- **Root cause:** Tweakpane's `addBinding` requires a non-empty string for color fields. The old code wrote the fallback `''` → `'#000000'` directly into `draft.value.props` before binding, then dispatched that value to the iframe and committed it on panel close — polluting blocks that never had a color set.
+- **Fix:** Color fields use a separate proxy object (`{ [field.key]: existingValue || '#ffffff' }`) that Tweakpane binds to. Only the Tweakpane `change` event handler writes back to `draft.value.props`. If the user never touches the color picker, the prop remains unset.
+
+### BUG-08 — Drag-and-drop only works in sidebar, not in preview iframe
+- **Root cause:** The preview iframe is a separate document; SortableJS pointer events cannot cross the iframe boundary, so the drag handles visible inside the runtime had no effect.
+- **Fix:** Added `enableDrag` prop to `SelectableBlock.vue` (default `false`). When `true`, the root div becomes HTML5-draggable (native `draggable` attribute, `dragstart`/`dragover`/`drop` handlers). The runtime `[slug].vue` sets `enableDrag` on each block and emits a `BLOCK_REORDER` postMessage (with `sourceId` + `targetId`) on drop. `usePageEditor` message listener translates these IDs to indices and calls `store.reorderBlocks()`. `BLOCK_REORDER` was added to the `EditorMessage` union and `isEditorMessage` type guard in `packages/contracts/messages.ts`.
+
+### ENHANCEMENT — Structured array field editor (ArrayField.vue)
+- **Problem:** Block props with known-shape array types (e.g. `PricingPlan[]`, `NavLink[]`) displayed as raw JSON textarea — error-prone and not user-friendly.
+- **Solution:** New `type: 'array'` schema field type with `subfields?: SubfieldDef[]`. `BlockEditorPanel` filters these out of the Tweakpane loop and renders `apps/editor/components/ArrayField.vue` for each. `ArrayField` supports: add/remove/move-up/move-down items; collapsible sub-forms per item; typed inputs per subfield (`string`, `number`, `boolean`, `color`); summary label from first string subfield; normalizes incoming JSON strings for backward compat. Schemas updated: `CardGrid`, `ImageGallery`, `CTABanner` (n/a), `Testimonials`, `Features`, `PricingTable`, `FAQ`, `TeamSection`, `LogoCloud`, `Timeline`, `Breadcrumb`, `StatsBanner`, `Accordion`, `Tabs`, `Carousel`, `ProductDetail`, `ProductGrid`, `navLinks` in header schema.

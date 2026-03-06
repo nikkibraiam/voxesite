@@ -4,7 +4,7 @@ export const PricingTableSchema = {
   defaultProps: {
     heading: 'Nuestros planes',
     subheading: 'Elige el plan que mejor se adapte a tus necesidades.',
-    plans: JSON.stringify([
+    plans: [
       {
         name: 'Básico',
         price: '$9',
@@ -23,11 +23,23 @@ export const PricingTableSchema = {
         ctaLabel: 'Empezar',
         ctaUrl: '#'
       }
-    ])
+    ]
   },
   fields: [
-    { key: 'heading',    label: 'Título',        type: 'string' },
-    { key: 'subheading', label: 'Subtítulo',      type: 'string' },
-    { key: 'plans',      label: 'Planes (JSON)', type: 'json' }
+    { key: 'heading',    label: 'Título',    type: 'string' },
+    { key: 'subheading', label: 'Subtítulo', type: 'string' },
+    {
+      key: 'plans',
+      label: 'Planes',
+      type: 'array',
+      subfields: [
+        { key: 'name',        label: 'Nombre',        type: 'string' },
+        { key: 'price',       label: 'Precio',        type: 'string' },
+        { key: 'period',      label: 'Período',       type: 'string' },
+        { key: 'highlighted', label: 'Destacado',     type: 'boolean' },
+        { key: 'ctaLabel',    label: 'Texto del CTA', type: 'string' },
+        { key: 'ctaUrl',      label: 'URL del CTA',   type: 'string' }
+      ]
+    }
   ]
 }

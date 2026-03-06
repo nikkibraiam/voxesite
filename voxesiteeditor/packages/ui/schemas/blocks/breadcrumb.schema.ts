@@ -3,14 +3,22 @@ export const BreadcrumbSchema = {
   label: 'Migas de pan',
   defaultProps: {
     separator: '/',
-    items: JSON.stringify([
+    items: [
       { label: 'Inicio', href: '/' },
       { label: 'Categoría', href: '/categoria' },
-      { label: 'Página actual' }
-    ])
+      { label: 'Página actual', href: '' }
+    ]
   },
   fields: [
-    { key: 'items',     label: 'Elementos (JSON)', type: 'json' },
+    {
+      key: 'items',
+      label: 'Elementos',
+      type: 'array',
+      subfields: [
+        { key: 'label', label: 'Etiqueta', type: 'string' },
+        { key: 'href',  label: 'URL',      type: 'string' }
+      ]
+    },
     { key: 'separator', label: 'Separador',        type: 'string' }
   ]
 }

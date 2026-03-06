@@ -5,15 +5,24 @@ export const StatsBannerSchema = {
     bgColor: '#1a1a2e',
     textColor: '#ffffff',
     columns: 4,
-    stats: JSON.stringify([
+    stats: [
       { value: '10K+', label: 'Clientes', icon: '👥' },
       { value: '99%',  label: 'Satisfacción', icon: '⭐' },
       { value: '50+',  label: 'Países', icon: '🌎' },
       { value: '24/7', label: 'Soporte', icon: '🛟' }
-    ])
+    ]
   },
   fields: [
-    { key: 'stats',     label: 'Estadísticas (JSON)', type: 'json' },
+    {
+      key: 'stats',
+      label: 'Estadísticas',
+      type: 'array',
+      subfields: [
+        { key: 'value', label: 'Valor',        type: 'string' },
+        { key: 'label', label: 'Etiqueta',     type: 'string' },
+        { key: 'icon',  label: 'Icono (emoji)', type: 'string' }
+      ]
+    },
     { key: 'columns',   label: 'Columnas',            type: 'string' },
     { key: 'bgColor',   label: 'Color de fondo',      type: 'color' },
     { key: 'textColor', label: 'Color de texto',      type: 'color' }

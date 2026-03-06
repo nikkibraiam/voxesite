@@ -23,6 +23,6 @@ export const FooterSchema = {
   fields: [
     { key: 'copyrightText', label: 'Texto de copyright', type: 'string' },
     { key: 'backgroundColor', label: 'Color de fondo', type: 'color' },
-    { key: 'columns', label: 'Columnas (JSON)', type: 'json' }
+    { key: 'columns', label: 'Columnas (JSON — { title, links: [{label,href}] }[])', type: 'json' }
   ]
 }

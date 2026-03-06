@@ -9,13 +9,13 @@ export const ProductDetailSchema = {
     description: 'Descripción detallada del producto.',
     ctaLabel: 'Comprar ahora',
     ctaUrl: '#',
-    images: JSON.stringify([
+    images: [
       { url: 'https://picsum.photos/seed/pd1/600/400', alt: 'Vista 1' }
-    ]),
-    specs: JSON.stringify([
+    ],
+    specs: [
       { label: 'Material', value: 'Algodón 100%' },
       { label: 'Peso', value: '250g' }
-    ])
+    ]
   },
   fields: [
     { key: 'name',          label: 'Nombre',           type: 'string' },
@@ -25,7 +25,23 @@ export const ProductDetailSchema = {
     { key: 'description',   label: 'Descripción',      type: 'string' },
     { key: 'ctaLabel',      label: 'Texto del botón',  type: 'string' },
     { key: 'ctaUrl',        label: 'URL del botón',    type: 'string' },
-    { key: 'images',        label: 'Imágenes (JSON)',  type: 'json' },
-    { key: 'specs',         label: 'Especificaciones (JSON)', type: 'json' }
+    {
+      key: 'images',
+      label: 'Imágenes',
+      type: 'array',
+      subfields: [
+        { key: 'url', label: 'URL', type: 'string' },
+        { key: 'alt', label: 'Alt text', type: 'string' }
+      ]
+    },
+    {
+      key: 'specs',
+      label: 'Especificaciones',
+      type: 'array',
+      subfields: [
+        { key: 'label', label: 'Atributo', type: 'string' },
+        { key: 'value', label: 'Valor',    type: 'string' }
+      ]
+    }
   ]
 }
