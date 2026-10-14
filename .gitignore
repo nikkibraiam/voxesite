@@ -32,3 +32,12 @@ google-services.json
 
 # Android Profiling
 *.hprof
+
+# OS / editor
+.DS_Store
+
+# Node / Nuxt (web workspace)
+node_modules/
+.nuxt/
+.output/
+.env

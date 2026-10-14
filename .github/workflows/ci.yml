@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-server:
+    name: Build server tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: voxesiteeditor/node-build-server
+    env:
+      PUPPETEER_SKIP_DOWNLOAD: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: voxesiteeditor/node-build-server/package-lock.json
+      - run: npm ci
+      - run: npm test
+
+  web:
+    name: Build editor and runtime
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: voxesiteeditor
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: voxesiteeditor/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: voxesiteeditor/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -F ./apps/editor build
+      - run: pnpm -F ./apps/runtime build
